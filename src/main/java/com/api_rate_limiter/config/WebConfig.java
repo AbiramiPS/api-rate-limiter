@@ -13,6 +13,9 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimiterInterceptor);
+        registry.addInterceptor(rateLimiterInterceptor)
+        .excludePathPatterns("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html",
+            "/admin/**", "/error"
+        ); // Exclude Swagger UI and API docs from rate limiting
     }
 }

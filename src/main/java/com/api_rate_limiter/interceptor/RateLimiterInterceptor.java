@@ -17,12 +17,13 @@ public class RateLimiterInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String clientId = request.getHeader("X-clientId");
+        
         if (clientId == null || clientId.isEmpty()) {
             response.setStatus(HttpStatus.BAD_REQUEST.value());
             response.getWriter().write("Missing X-clientId header.");
             return false; // Deny the request
         }
-        if(!rateLimiterService.isRequestAllowed(clientId)) {
+               if(!rateLimiterService.isRequestAllowed(clientId)) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.getWriter().write("Request is denied due to rate limiting.");
             return false; // Deny the request
