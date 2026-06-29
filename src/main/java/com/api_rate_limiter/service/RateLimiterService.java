@@ -9,13 +9,25 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
-import com.api_rate_limiter.entity.*;
+import com.api_rate_limiter.entity.RatePlanRule;
+import com.api_rate_limiter.entity.UserCustomRule;
+import com.api_rate_limiter.entity.UserPlan;
 
-import com.api_rate_limiter.repository.*;
+import com.api_rate_limiter.repository.RatePlanRuleRepository;
+import com.api_rate_limiter.repository.UserCustomRuleRepository;
+import com.api_rate_limiter.repository.UserPlanRepository;
+import com.api_rate_limiter.repository.RuleRepository;
+import com.api_rate_limiter.entity.RatePlan;
+
 
 @Service
 public class RateLimiterService {
 
+    /*
+     * clientId
+     * →
+     * timestamps
+     */
     private final Map<String, Queue<Long>> clientRequestTimes = new ConcurrentHashMap<>();
 
     @Autowired
@@ -30,47 +42,97 @@ public class RateLimiterService {
     public boolean isRequestAllowed(
             String clientId) {
 
+        /*
+         * Find User
+         */
+
         UserPlan user = userRepo
                 .findByClientId(
                         clientId);
 
         if (user == null) {
 
+            System.out.println(
+                    "User not found");
+
             return false;
 
         }
 
         /*
-         * Get default rule
+         * Check plan active
+         */
+
+        if (!user
+                .getPlan()
+                .getActive()) {
+
+            System.out.println(
+                    "Plan disabled");
+
+            return false;
+
+        }
+
+        /*
+         * Load default plan rule
          */
 
         RatePlanRule rule = ruleRepo
                 .findByPlan(
                         user.getPlan());
 
+        if (rule == null) {
+
+            System.out.println(
+                    "Rule not found");
+
+            return false;
+
+        }
+
         int limit = rule
                 .getMaxRequests();
 
         long window = convertWindow(
-                rule.getWindowValue(),
-                rule.getWindowUnit());
+
+                rule
+                        .getWindowValue(),
+
+                rule
+                        .getWindowUnit()
+
+        );
 
         /*
-         * Override for enterprise
+         * Enterprise override
          */
 
-        UserCustomRule custom = customRepo
-                .findByUser(
-                        user);
+        
+        if ("ENTERPRISE".equals(user.getPlan().getPlanName())
+                        && user.isCustomRuleEnabled()) {
+            UserCustomRule custom =
 
-        if (custom != null) {
+                    customRepo
+                            .findByUser(
+                                    user);
 
-            limit = custom
-                    .getMaxRequests();
+            if (custom != null) {
 
-            window = convertWindow(
-                    custom.getWindowValue(),
-                    custom.getWindowUnit());
+                limit = custom
+                        .getMaxRequests();
+
+                window = convertWindow(
+
+                        custom
+                                .getWindowValue(),
+
+                        custom
+                                .getWindowUnit()
+
+                );
+
+            }
 
         }
 
@@ -91,23 +153,10 @@ public class RateLimiterService {
 
         synchronized (queue) {
 
-            while (
-
-            !queue.isEmpty()
-
-                    &&
-
-                    queue.peek()
-
-                            <=
-
-                            current - window
-
-            ) {
-
-                queue.poll();
-
-            }
+            cleanupOldRequests(
+                    queue,
+                    current,
+                    window);
 
             if (
 
@@ -122,9 +171,15 @@ public class RateLimiterService {
                 queue.offer(
                         current);
 
+                System.out.println(
+                        "Allowed");
+
                 return true;
 
             }
+
+            System.out.println(
+                    "Rate Limit Exceeded");
 
             return false;
 
@@ -133,7 +188,41 @@ public class RateLimiterService {
     }
 
     /*
-     * Window conversion
+     * Cleanup expired timestamps
+     */
+
+    private void cleanupOldRequests(
+
+            Queue<Long> queue,
+
+            long current,
+
+            long window
+
+    ) {
+
+        while (
+
+        !queue.isEmpty()
+
+                &&
+
+                queue.peek()
+
+                        <=
+
+                        current - window
+
+        ) {
+
+            queue.poll();
+
+        }
+
+    }
+
+    /*
+     * Convert window
      */
 
     private long convertWindow(

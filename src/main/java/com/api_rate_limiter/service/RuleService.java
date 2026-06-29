@@ -3,37 +3,64 @@ package com.api_rate_limiter.service;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.api_rate_limiter.entity.RatePlan;
 import com.api_rate_limiter.entity.RatePlanRule;
+
 import com.api_rate_limiter.repository.RuleRepository;
+import com.api_rate_limiter.repository.RatePlanRepository;
 
 @Service
 public class RuleService {
 
-@Autowired
-private RuleRepository ruleRepository;
+        @Autowired
+        private RuleRepository ruleRepository;
 
-public RatePlanRule
-getRuleByPlan(
-String plan
-){
+        @Autowired
+        private RatePlanRepository ratePlanRepository;
 
-return ruleRepository
-.findByPlan(
-plan
-);
+        /*
+         * GET
+         */
 
-}
+        public RatePlanRule getRuleByPlan(
+                        String planName) {
 
-public RatePlanRule
-saveRule(
-RatePlanRule rule
-){
+                RatePlan plan =
 
-return ruleRepository
-.save(
-rule
-);
+                                ratePlanRepository
+                                                .findByPlanName(
+                                                                planName);
 
-}
+                return ruleRepository
+                                .findByPlan(
+                                                plan);
+
+        }
+
+        /*
+         * ADD THIS
+         */
+
+        public RatePlanRule saveRule(
+                        RatePlanRule rule) {
+
+                RatePlanRule existing =
+
+                                ruleRepository
+                                                .findByPlan(
+                                                                rule.getPlan());
+
+                if (existing != null) {
+
+                        rule.setId(
+                                        existing.getId());
+
+                }
+
+                return ruleRepository
+                                .save(
+                                                rule);
+
+        }
 
 }

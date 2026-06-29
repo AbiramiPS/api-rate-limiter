@@ -12,6 +12,7 @@ extends JpaRepository<
 RatePlan,
 Long>{
 
+
 RatePlan
 findByPlanName(
 String plan

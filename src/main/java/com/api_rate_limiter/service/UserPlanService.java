@@ -4,7 +4,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.api_rate_limiter.entity.UserPlan;
+import com.api_rate_limiter.entity.RatePlan;
+
 import com.api_rate_limiter.repository.UserPlanRepository;
+import com.api_rate_limiter.repository.RatePlanRepository;
 
 @Service
 public class UserPlanService {
@@ -12,26 +15,47 @@ public class UserPlanService {
 @Autowired
 private UserPlanRepository repo;
 
-public UserPlan
-getUserPlan(
-String clientId
+@Autowired
+private RatePlanRepository planRepo;
+
+public UserPlan saveUserPlan(
+UserPlan user
 ){
 
-return repo
-.findByClientId(
-clientId
+Long planId =
+user
+.getPlan()
+.getId();
+
+RatePlan plan =
+
+planRepo
+.findById(
+planId
+)
+
+.orElseThrow(
+()->new RuntimeException(
+"Plan not found"
+)
+);
+
+user.setPlan(
+plan
+);
+
+return repo.save(
+user
 );
 
 }
 
-public UserPlan
-saveUserPlan(
-UserPlan user
+public UserPlan getUserPlan(
+String clientId
 ){
 
-return repo
-.save(
-user
+return repo.findByClientId(
+clientId
 );
 
 }

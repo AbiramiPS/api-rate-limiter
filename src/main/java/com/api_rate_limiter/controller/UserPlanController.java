@@ -18,6 +18,7 @@ public class UserPlanController {
     @Autowired
     private UserPlanService userPlanService;
 
+
     @GetMapping("/{clientId}")
     public ResponseEntity<UserPlan> getUserPlan(@PathVariable String clientId) {
         UserPlan userPlan = userPlanService.getUserPlan(clientId);

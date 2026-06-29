@@ -11,24 +11,21 @@ import lombok.*;
 
 public class UserPlan {
 
-@Id
-@GeneratedValue(
-strategy =
-GenerationType.IDENTITY
-)
-private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
 
-@Column(
-unique = true
-)
-private String clientId;
+    private Long id;
 
-@ManyToOne
+    @Column(unique = true)
 
-@JoinColumn(
-name="plan_id"
-)
+    private String clientId;
 
-private RatePlan plan;
+    private String clientName;
+    @ManyToOne
 
+    @JoinColumn(name = "plan_id")
+
+    private RatePlan plan;
+    
+    private boolean isCustomRuleEnabled;
 }
