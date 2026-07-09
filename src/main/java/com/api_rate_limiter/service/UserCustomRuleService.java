@@ -16,58 +16,17 @@ private UserCustomRuleRepository repo;
 @Autowired
 private UserPlanRepository userRepo;
 
-/*
-GET
-*/
-
-public UserCustomRule
-getRule(
-UserPlan user
-){
-
-return repo
-.findByUser(
-user
-);
-
+/*GET*/
+public UserCustomRule getRule(UserPlan user){
+    return repo.findByUser(user);
 }
 
-
-/*
-SAVE
-*/
-
-public UserCustomRule
-saveRule(
-UserCustomRule rule
-){
-
-Long userId =
-
-rule
-.getUser()
-.getId();
-
-UserPlan user =
-
-userRepo
-.findById(
-userId
-)
-
-.orElseThrow(
-()->new RuntimeException(
-"User not found"
-));
-
-rule.setUser(
-user
-);
-
-return repo.save(
-rule
-);
-
+/* SAVE */
+public UserCustomRule saveRule(UserCustomRule rule) {
+    Long userId = rule.getUser().getId();
+    UserPlan user = userRepo.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+    rule.setUser(user);
+    return repo.save(rule);
 }
 
 }

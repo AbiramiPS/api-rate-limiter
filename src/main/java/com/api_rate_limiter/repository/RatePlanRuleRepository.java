@@ -5,15 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import com.api_rate_limiter.entity.RatePlan;
 import com.api_rate_limiter.entity.RatePlanRule;
 
-public interface RatePlanRuleRepository
-extends JpaRepository<
-RatePlanRule,
-Long
->{
-
-RatePlanRule
-findByPlan(
-RatePlan plan
-);
-
+public interface RatePlanRuleRepository extends JpaRepository<RatePlanRule,Long>{
+    RatePlanRule findByPlan(RatePlan plan);
 }

@@ -6,8 +6,5 @@ import org.springframework.stereotype.Repository;
 import com.api_rate_limiter.entity.RatePlan;
 @Repository
 public interface RuleRepository extends JpaRepository<RatePlanRule, Long> {
-    RatePlanRule
-findByPlan(
-RatePlan plan
-);
+    RatePlanRule findByPlan(RatePlan plan);
 }

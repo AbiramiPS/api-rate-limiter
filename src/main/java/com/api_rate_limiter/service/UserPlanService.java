@@ -18,46 +18,17 @@ private UserPlanRepository repo;
 @Autowired
 private RatePlanRepository planRepo;
 
-public UserPlan saveUserPlan(
-UserPlan user
-){
-
-Long planId =
-user
-.getPlan()
-.getId();
-
-RatePlan plan =
-
-planRepo
-.findById(
-planId
-)
-
-.orElseThrow(
-()->new RuntimeException(
-"Plan not found"
-)
+public UserPlan saveUserPlan(UserPlan user){
+    Long planId = user.getPlan().getId();  // to get the plan id
+    RatePlan plan = planRepo.findById(planId).orElseThrow(()->new RuntimeException(
+    "Plan not found"
+    )
 );
-
-user.setPlan(
-plan
-);
-
-return repo.save(
-user
-);
-
+    user.setPlan(plan);
+    return repo.save(user);
 }
 
-public UserPlan getUserPlan(
-String clientId
-){
-
-return repo.findByClientId(
-clientId
-);
-
-}
-
+public UserPlan getUserPlan(String clientId){
+    return repo.findByClientId(clientId);
+    }
 }

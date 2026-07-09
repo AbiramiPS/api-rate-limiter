@@ -7,10 +7,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api")
 public class RateLimiterController {
-    
 
     // http://localhost:8082/api/rate-limit
-    @GetMapping("/rate-limit") 
+    @GetMapping("/rate-limit")
     public String rateLimitEndpoint() {
 
         return "Request is allowed. This is a response from the API.";

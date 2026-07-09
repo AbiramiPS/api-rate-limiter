@@ -12,24 +12,14 @@ import lombok.*;
 public class RatePlanRule {
 
 @Id
-@GeneratedValue(
-strategy =
-GenerationType.IDENTITY
-)
-private Long id;
+@GeneratedValue(strategy =GenerationType.IDENTITY)
+    private Long id;
 
 @OneToOne
-
-@JoinColumn(
-name="plan_id"
-)
-
-private RatePlan plan;
-
-private Integer maxRequests;
-
-private Integer windowValue;
-
-private String windowUnit;
+@JoinColumn(name="plan_id")
+    private RatePlan plan;
+    private Integer maxRequests;
+    private Integer windowValue;
+    private String windowUnit;
 
 }

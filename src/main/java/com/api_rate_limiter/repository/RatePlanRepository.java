@@ -7,15 +7,6 @@ import com.api_rate_limiter.entity.RatePlan;
 
 
 @Repository
-public interface RatePlanRepository
-extends JpaRepository<
-RatePlan,
-Long>{
-
-
-RatePlan
-findByPlanName(
-String plan
-);
-
+public interface RatePlanRepository extends JpaRepository<RatePlan,Long>{
+    RatePlan findByPlanName(String plan);
 }

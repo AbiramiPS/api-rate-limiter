@@ -8,9 +8,11 @@ import com.api_rate_limiter.interceptor.RateLimiterInterceptor;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-    @Autowired
+    // used to inject the RateLimiterInterceptor
+    @Autowired   
     private RateLimiterInterceptor rateLimiterInterceptor;
 
+    // used to register the RateLimiterInterceptor. we already have the addInterceptors method in WebMVCConfigurer so we are overriding it
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(rateLimiterInterceptor)

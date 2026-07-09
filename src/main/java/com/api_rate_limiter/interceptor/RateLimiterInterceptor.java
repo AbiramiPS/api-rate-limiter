@@ -23,7 +23,7 @@ public class RateLimiterInterceptor implements HandlerInterceptor {
             response.getWriter().write("Missing X-clientId header.");
             return false; // Deny the request
         }
-               if(!rateLimiterService.isRequestAllowed(clientId)) {
+            if(!rateLimiterService.isRequestAllowed(clientId)) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.getWriter().write("Request is denied due to rate limiting.");
             return false; // Deny the request
