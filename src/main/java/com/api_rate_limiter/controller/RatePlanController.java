@@ -1,13 +1,9 @@
 package com.api_rate_limiter.controller;
 
 import org.springframework.web.bind.annotation.*;
-
 import org.springframework.beans.factory.annotation.Autowired;
-
 import org.springframework.http.*;
-
 import com.api_rate_limiter.entity.RatePlan;
-
 import com.api_rate_limiter.service.RatePlanService;
 
 @RestController
@@ -15,88 +11,34 @@ import com.api_rate_limiter.service.RatePlanService;
 @RequestMapping("/admin/plans")
 
 public class RatePlanController {
+        @Autowired
+        private RatePlanService ratePlanService;
 
-    @Autowired
-    private RatePlanService ratePlanService;
+        /** GET PLAN */
+        @GetMapping("/{planName}")
 
-    /*
-     * GET PLAN
-     */
-
-    @GetMapping("/{planName}")
-
-    public ResponseEntity<RatePlan> getPlan(
-
-            @PathVariable String planName
-
-    ) {
-
-        RatePlan plan =
-
-                ratePlanService
-                        .getPlan(
-                                planName);
-
-        if (plan == null) {
-
-            return ResponseEntity
-                    .notFound()
-                    .build();
-
+        public ResponseEntity<RatePlan> getPlan(@PathVariable String planName) {
+                RatePlan plan = ratePlanService.getPlan(planName);
+                if (plan == null) {
+                        return ResponseEntity.notFound().build();
+                }
+                return ResponseEntity.ok(plan);
         }
 
-        return ResponseEntity
-                .ok(
-                        plan);
+        /** CREATE PLAN */
 
-    }
+        @PostMapping
 
-    /*
-     * CREATE PLAN
-     */
+        public ResponseEntity<RatePlan> createPlan(@RequestBody RatePlan plan) {
+                RatePlan saved = ratePlanService.savePlan(plan);
+                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        }
 
-    @PostMapping
+        /** GET ALL PLANS */
 
-    public ResponseEntity<RatePlan> createPlan(
+        @GetMapping
 
-            @RequestBody RatePlan plan
-
-    ) {
-
-        RatePlan saved =
-
-                ratePlanService
-                        .savePlan(
-                                plan);
-
-        return ResponseEntity
-
-                .status(
-                        HttpStatus.CREATED)
-
-                .body(
-                        saved);
-
-    }
-
-    /*
-     * GET ALL
-     */
-
-    @GetMapping
-
-    public ResponseEntity<java.util.List<RatePlan>>
-
-            getAll() {
-
-        return ResponseEntity
-                .ok(
-
-                        ratePlanService
-                                .getAll()
-
-                );
-
-    }
-
+        public ResponseEntity<java.util.List<RatePlan>> getAll() {
+                return ResponseEntity.ok(ratePlanService.getAll());
+        }
 }

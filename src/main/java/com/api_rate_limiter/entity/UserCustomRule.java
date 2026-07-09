@@ -12,24 +12,16 @@ import lombok.*;
 public class UserCustomRule {
 
 @Id
-@GeneratedValue(
-strategy =
-GenerationType.IDENTITY
-)
-private Long id;
+@GeneratedValue(strategy =GenerationType.IDENTITY)
+    private Long id;
 
 @OneToOne
 
-@JoinColumn(
-name="user_plan_id"
-)
-
+@JoinColumn(name="user_plan_id")
 private UserPlan user;
 
 private Integer maxRequests;
-
 private Integer windowValue;
-
 private String windowUnit;
 
 }

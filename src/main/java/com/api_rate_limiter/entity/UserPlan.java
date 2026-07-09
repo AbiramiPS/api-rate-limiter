@@ -17,15 +17,12 @@ public class UserPlan {
     private Long id;
 
     @Column(unique = true)
-
     private String clientId;
-
     private String clientName;
-    @ManyToOne
-
-    @JoinColumn(name = "plan_id")
-
-    private RatePlan plan;
     
+    @ManyToOne
+    @JoinColumn(name = "plan_id")
+    private RatePlan plan;
+
     private boolean isCustomRuleEnabled;
 }

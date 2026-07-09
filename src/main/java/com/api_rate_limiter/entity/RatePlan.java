@@ -12,13 +12,11 @@ import lombok.*;
 public class RatePlan {
 
 @Id
-@GeneratedValue(
-strategy =
-GenerationType.IDENTITY)
-private Long id;
+@GeneratedValue(strategy =GenerationType.IDENTITY)
+    private Long id;
 
 @Column(unique = true)
-private String planName;
-private Boolean active;
+    private String planName;
+    private Boolean active;
 
 }
