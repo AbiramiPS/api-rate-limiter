@@ -8,7 +8,7 @@ import com.api_rate_limiter.entity.RatePlanRule;
 
 import com.api_rate_limiter.repository.RuleRepository;
 import com.api_rate_limiter.repository.RatePlanRepository;
-
+import com.api_rate_limiter.exception.ResourceNotFoundException;
 @Service
 public class RuleService {
         @Autowired
@@ -18,7 +18,7 @@ public class RuleService {
 
         /*         * GET         */
         public RatePlanRule getRuleByPlan(String planName) {
-                RatePlan plan = ratePlanRepository.findByPlanName(planName);
+                RatePlan plan = ratePlanRepository.findByPlanName(planName).orElseThrow(()-> new ResourceNotFoundException("Plan not found"));
                 return ruleRepository.findByPlan(plan);
         }
 

@@ -4,6 +4,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import com.api_rate_limiter.entity.RatePlan;
+import com.api_rate_limiter.exception.DuplicateResourceException;
+import com.api_rate_limiter.exception.ResourceNotFoundException;
 import com.api_rate_limiter.repository.RatePlanRepository;
 
 @Service
@@ -11,10 +13,14 @@ public class RatePlanService {
     @Autowired
     private RatePlanRepository repo;
     public RatePlan getPlan(String name) {
-        return repo.findByPlanName(name);
+        return repo.findByPlanName(name).orElseThrow(()->new ResourceNotFoundException("Plan not found"));
     }
 
     public RatePlan savePlan(RatePlan plan) {
+        if (repo.findByPlanName(plan.getPlanName()).isPresent()) {
+            throw new DuplicateResourceException("Plan already exists");
+        }
+
         return repo.save(plan);
     }
 

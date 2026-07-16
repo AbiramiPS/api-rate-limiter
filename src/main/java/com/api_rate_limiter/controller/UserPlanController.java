@@ -1,5 +1,7 @@
 package com.api_rate_limiter.controller;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +34,11 @@ public class UserPlanController {
     public ResponseEntity<UserPlan> createUserPlan(@RequestBody UserPlan userPlan) {
         UserPlan savedUserPlan = userPlanService.saveUserPlan(userPlan);
         return new ResponseEntity<>(savedUserPlan, HttpStatus.CREATED);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<UserPlan>> getAll(){
+        return ResponseEntity.ok(userPlanService.getAll());
     }
 
 }

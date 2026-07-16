@@ -15,10 +15,13 @@ import com.api_rate_limiter.entity.UserPlan;
 import com.api_rate_limiter.repository.RatePlanRuleRepository;
 import com.api_rate_limiter.repository.UserCustomRuleRepository;
 import com.api_rate_limiter.repository.UserPlanRepository;
+import com.api_rate_limiter.exception.BadRequestException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Service
 public class RateLimiterService {
-
+    private static final Logger logger = LoggerFactory.getLogger(RateLimiterService.class);
     /** clientId → timestamps */
     private final Map<String, Queue<Long>> clientRequestTimes = new ConcurrentHashMap<>();
 
@@ -32,42 +35,42 @@ public class RateLimiterService {
     private UserCustomRuleRepository customRepo;
 
     public boolean isRequestAllowed(String clientId) {
-
+     
         /** Find User */
         UserPlan user = userRepo.findByClientId(clientId);
         if (user == null) {
-            System.out.println("User not found");
+            logger.error("User not found");
             return false;
         }
 
         /** Check plan active */
         if (!user.getPlan().getActive()) {
-            System.out.println("Plan disabled");
+            logger.error("Plan disabled");
             return false;
         }
 
         /** Load default plan rule */
         RatePlanRule rule = ruleRepo.findByPlan(user.getPlan());
         if (rule == null) {
-            System.out.println("Rule not found");
+            logger.error("Rule not found");
             return false;
         }
         int limit = rule.getMaxRequests();
-        System.out.println("Limit: " + limit);
+        logger.info("Limit: " + limit);
         long window = convertWindow(rule.getWindowValue(), rule.getWindowUnit());
-        System.out.println("Window: " + window);
+        logger.info("Window: " + window);
 
         /** Enterprise override */
 
         if ("ENTERPRISE".equals(user.getPlan().getPlanName()) && user.isCustomRuleEnabled()) {
             UserCustomRule custom = customRepo.findByUser(user);
-            System.out.println("Custom rule enabled" + custom);
+            logger.info("Custom rule enabled" + custom);
             if (custom != null) {
                 limit = custom.getMaxRequests();
-                System.out.println("Custom Limit: " + limit);
+                logger.info("Custom Limit: " + limit);
                 window = convertWindow(custom.getWindowValue(),
                         custom.getWindowUnit());
-                System.out.println("Custom Window: " + window);
+                logger.info("Custom Window: " + window);
             }
         }
 
@@ -87,10 +90,10 @@ public class RateLimiterService {
 
             if (queue.size() < limit) {
                 queue.offer(current);
-                System.out.println("Allowed" + queue);
+                logger.info("Allowed" + queue);
                 return true;
             }
-            System.out.println("Rate Limit Exceeded");
+            logger.error("Rate Limit Exceeded");
             return false;
         }
     }
@@ -106,6 +109,7 @@ public class RateLimiterService {
     /** Convert window */
 
     private long convertWindow(int value, String unit) {
+        logger.info("Window Unit from DB: {}", unit);
         switch (unit) {
             case "SECOND":
                 return value * 1000L;
@@ -114,7 +118,9 @@ public class RateLimiterService {
             case "HOUR":
                 return value * 60 * 60 * 1000L;
             default:
-                throw new RuntimeException("Invalid Window");
+                throw new BadRequestException("Invalid Window");
+                
         }
+        
     }
 }
