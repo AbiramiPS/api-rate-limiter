@@ -3,9 +3,13 @@ package com.api_rate_limiter.controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
+
+import com.api_rate_limiter.dto.response.RatePlanResponse;
 import com.api_rate_limiter.entity.RatePlan;
 import com.api_rate_limiter.service.RatePlanService;
-
+import com.api_rate_limiter.dto.request.RatePlanRequest;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
 @RestController
 
 @RequestMapping("/admin/plans")
@@ -17,20 +21,17 @@ public class RatePlanController {
         /** GET PLAN */
         @GetMapping("/{planName}")
 
-        public ResponseEntity<RatePlan> getPlan(@PathVariable String planName) {
-                RatePlan plan = ratePlanService.getPlan(planName);
-                if (plan == null) {
-                        return ResponseEntity.notFound().build();
-                }
-                return ResponseEntity.ok(plan);
+        public ResponseEntity<RatePlanResponse> getPlan(@PathVariable String planName) {
+           
+                return ResponseEntity.ok(ratePlanService.getPlan(planName));
         }
 
         /** CREATE PLAN */
 
         @PostMapping
 
-        public ResponseEntity<RatePlan> createPlan(@RequestBody RatePlan plan) {
-                RatePlan saved = ratePlanService.savePlan(plan);
+        public ResponseEntity<RatePlanResponse> createPlan(@Valid  @RequestBody RatePlanRequest request) {
+                RatePlanResponse  saved = ratePlanService.savePlan(request);
                 return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         }
 
@@ -38,7 +39,7 @@ public class RatePlanController {
 
         @GetMapping
 
-        public ResponseEntity<java.util.List<RatePlan>> getAll() {
-                return ResponseEntity.ok(ratePlanService.getAll());
+        public ResponseEntity<java.util.List<RatePlanResponse>> getAll(Pageable pageable) {
+                return ResponseEntity.ok(ratePlanService.getAll(pageable));
         }
 }

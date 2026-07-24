@@ -1,7 +1,6 @@
 package com.api_rate_limiter.entity;
 
 import jakarta.persistence.*;
-
 import lombok.*;
 
 @Entity
@@ -13,11 +12,11 @@ public class UserPlan {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-
     private Long id;
 
     @Column(unique = true)
     private String clientId;
+    
     private String clientName;
     
     @ManyToOne

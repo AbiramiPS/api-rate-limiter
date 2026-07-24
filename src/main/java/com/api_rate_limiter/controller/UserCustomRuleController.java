@@ -6,11 +6,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import org.springframework.http.*;
 
+import com.api_rate_limiter.dto.request.UserCustomRuleRequest;
+import com.api_rate_limiter.dto.response.UserCustomRuleResponse;
+import com.api_rate_limiter.dto.response.UserPlanResponse;
 import com.api_rate_limiter.entity.UserCustomRule;
 import com.api_rate_limiter.entity.UserPlan;
 
 import com.api_rate_limiter.service.UserCustomRuleService;
 import com.api_rate_limiter.service.UserPlanService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/admin/custom-rules")
@@ -29,65 +34,27 @@ public class UserCustomRuleController {
 
     @GetMapping("/{clientId}")
 
-    public ResponseEntity<UserCustomRule> getCustomRule(
 
-            @PathVariable String clientId
+public ResponseEntity<UserCustomRuleResponse> getCustomRule(@PathVariable String clientId) {
 
-    ) {
+    UserPlan user = userPlanService.getUserPlanEntity(clientId);
 
-        UserPlan user = userPlanService
-                .getUserPlan(
-                        clientId);
+    UserCustomRuleResponse response = customService.getRule(user.getId());
 
-        if (user == null) {
-
-            return ResponseEntity
-                    .notFound()
-                    .build();
-
-        }
-
-        UserCustomRule rule = customService
-                .getRule(
-                        user);
-
-        if (rule == null) {
-
-            return ResponseEntity
-                    .notFound()
-                    .build();
-
-        }
-
-        return ResponseEntity
-                .ok(
-                        rule);
-
+    return ResponseEntity.ok(response);
     }
 
     /*
      * CREATE CUSTOM RULE
      */
 
-    @PostMapping
+  
+@PostMapping
+public ResponseEntity<UserCustomRuleResponse> createRule(
+        @Valid @RequestBody UserCustomRuleRequest request) {
 
-    public ResponseEntity<UserCustomRule> createRule(
+    UserCustomRuleResponse response = customService.saveRule(request);
 
-            @RequestBody UserCustomRule rule
-
-    ) {
-
-        UserCustomRule saved = customService
-                .saveRule(
-                        rule);
-
-        return ResponseEntity
-                .status(
-                        HttpStatus.CREATED)
-
-                .body(
-                        saved);
-
-    }
-
+    return ResponseEntity.status(HttpStatus.CREATED).body(response);
+}
 }

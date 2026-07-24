@@ -11,9 +11,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.api_rate_limiter.service.UserPlanService;
-import com.api_rate_limiter.entity.UserPlan;
 import org.springframework.web.bind.annotation.RequestBody;
-
+import com.api_rate_limiter.dto.request.UserPlanRequest;
+import com.api_rate_limiter.dto.response.UserPlanResponse;
+import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/admin/user-plans")
 public class UserPlanController {
@@ -22,23 +23,18 @@ public class UserPlanController {
 
 
     @GetMapping("/{clientId}")
-    public ResponseEntity<UserPlan> getUserPlan(@PathVariable String clientId) {
-        UserPlan userPlan = userPlanService.getUserPlan(clientId);
-        if (userPlan != null) {
-            return new ResponseEntity<>(userPlan, HttpStatus.OK);
-        } else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    public ResponseEntity<UserPlanResponse> getUserPlan(@PathVariable String clientId) {
+        return ResponseEntity.ok(userPlanService.getUserPlan(clientId));
         }
-    }
+   
     @PostMapping
-    public ResponseEntity<UserPlan> createUserPlan(@RequestBody UserPlan userPlan) {
-        UserPlan savedUserPlan = userPlanService.saveUserPlan(userPlan);
+    public ResponseEntity<UserPlanResponse> createUserPlan(@Valid @RequestBody UserPlanRequest request) {
+        UserPlanResponse savedUserPlan = userPlanService.saveUserPlan(request);
         return new ResponseEntity<>(savedUserPlan, HttpStatus.CREATED);
     }
 
     @GetMapping
-    public ResponseEntity<List<UserPlan>> getAll(){
+    public ResponseEntity<List<UserPlanResponse>> getAll(){
         return ResponseEntity.ok(userPlanService.getAll());
     }
-
 }
