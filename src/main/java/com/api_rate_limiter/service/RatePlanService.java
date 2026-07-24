@@ -11,6 +11,8 @@ import com.api_rate_limiter.dto.response.RatePlanResponse;
 import com.api_rate_limiter.entity.RatePlan;
 import com.api_rate_limiter.mapper.RatePlanMapper;
 import com.api_rate_limiter.repository.RatePlanRepository;
+
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 @Service
 public class RatePlanService {
@@ -32,7 +34,8 @@ public class RatePlanService {
                 return mapper.toResponse(plan);
         }
 
-        public List<RatePlanResponse> getAll(Pageable pageable) {
-                return repository.findAll(pageable).stream().map(mapper::toResponse).collect(Collectors.toList());
+        public Page<RatePlanResponse> getAll(Pageable pageable) {
+                Page<RatePlan> plans = repository.findAll(pageable);
+                return plans.map(mapper::toResponse);
         }
 }

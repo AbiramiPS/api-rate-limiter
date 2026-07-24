@@ -8,8 +8,7 @@ import org.springframework.http.*;
 
 import com.api_rate_limiter.dto.request.UserCustomRuleRequest;
 import com.api_rate_limiter.dto.response.UserCustomRuleResponse;
-import com.api_rate_limiter.dto.response.UserPlanResponse;
-import com.api_rate_limiter.entity.UserCustomRule;
+
 import com.api_rate_limiter.entity.UserPlan;
 
 import com.api_rate_limiter.service.UserCustomRuleService;

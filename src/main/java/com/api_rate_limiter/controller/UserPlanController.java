@@ -1,7 +1,8 @@
 package com.api_rate_limiter.controller;
 
 import java.util.List;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,13 +15,17 @@ import com.api_rate_limiter.service.UserPlanService;
 import org.springframework.web.bind.annotation.RequestBody;
 import com.api_rate_limiter.dto.request.UserPlanRequest;
 import com.api_rate_limiter.dto.response.UserPlanResponse;
+import com.api_rate_limiter.entity.RatePlan;
+import com.api_rate_limiter.entity.UserPlan;
+
+import com.api_rate_limiter.repository.UserPlanRepository;
 import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/admin/user-plans")
 public class UserPlanController {
     @Autowired
     private UserPlanService userPlanService;
-
 
     @GetMapping("/{clientId}")
     public ResponseEntity<UserPlanResponse> getUserPlan(@PathVariable String clientId) {
@@ -34,7 +39,12 @@ public class UserPlanController {
     }
 
     @GetMapping
-    public ResponseEntity<List<UserPlanResponse>> getAll(){
-        return ResponseEntity.ok(userPlanService.getAll());
+    public ResponseEntity<Page<UserPlanResponse>> getAll(Pageable pageable) {
+        
+        System.out.println("Page = " + pageable.getPageNumber());
+        System.out.println("Size = " + pageable.getPageSize());
+        System.out.println("Sort = " + pageable.getSort());
+
+        return ResponseEntity.ok(userPlanService.getAll(pageable));
     }
 }

@@ -9,6 +9,8 @@ import com.api_rate_limiter.entity.RatePlan;
 import com.api_rate_limiter.service.RatePlanService;
 import com.api_rate_limiter.dto.request.RatePlanRequest;
 import jakarta.validation.Valid;
+
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 @RestController
 
@@ -39,7 +41,7 @@ public class RatePlanController {
 
         @GetMapping
 
-        public ResponseEntity<java.util.List<RatePlanResponse>> getAll(Pageable pageable) {
+        public ResponseEntity<Page<RatePlanResponse>> getAll(Pageable pageable) {
                 return ResponseEntity.ok(ratePlanService.getAll(pageable));
         }
 }

@@ -3,6 +3,8 @@ package com.api_rate_limiter.service;
 import org.springframework.stereotype.Service;
 import java.lang.module.ResolutionException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
+
 import com.api_rate_limiter.entity.UserPlan;
 import com.api_rate_limiter.dto.request.UserPlanRequest;
 import com.api_rate_limiter.dto.response.UserPlanResponse;
@@ -12,7 +14,8 @@ import com.api_rate_limiter.repository.RatePlanRepository;
 import com.api_rate_limiter.exception.DuplicateResourceException;
 import com.api_rate_limiter.exception.ResourceNotFoundException;
 import java.util.List;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 @Service
 public class UserPlanService {
 
@@ -28,15 +31,14 @@ public class UserPlanService {
             throw new DuplicateResourceException("Client ID already exists");
         }
         Long planId = request.getPlanId(); // to get the plan id
-        RatePlan plan = planRepo.findById(planId).orElseThrow(() -> 
-            new ResourceNotFoundException("Plan not found"));
-        
+        RatePlan plan = planRepo.findById(planId).orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+
         UserPlan user = new UserPlan();
 
         user.setClientId(request.getClientId());
-        user.setClientName(request .getClientName());
+        user.setClientName(request.getClientName());
         user.setCustomRuleEnabled(request.getCustomRuleEnabled());
-        user.setPlan(plan); 
+        user.setPlan(plan);
         UserPlan saved = repo.save(user);
 
         // Entity -> Response DTO
@@ -76,21 +78,20 @@ public class UserPlanService {
         }
         return user;
     }
-    public List<UserPlanResponse> getAll() {
-        List<UserPlan> users = repo.findAll();
 
-        return users.stream().map(user -> {
+    public Page<UserPlanResponse> getAll(Pageable pageable) {
+        Page<UserPlan> users = repo.findAll(pageable);
 
-            UserPlanResponse response = new UserPlanResponse();
+    return users.map(user -> {
+        UserPlanResponse response = new UserPlanResponse();
 
-            response.setId(user.getId());
-            response.setClientId(user.getClientId());
-            response.setClientName(user.getClientName());
-            response.setPlanName(user.getPlan().getPlanName());
-            response.setCustomRuleEnabled(user.isCustomRuleEnabled());
+        response.setId(user.getId());
+        response.setClientId(user.getClientId());
+        response.setClientName(user.getClientName());
+        response.setPlanName(user.getPlan().getPlanName());
+        response.setCustomRuleEnabled(user.isCustomRuleEnabled());
 
-            return response;
-
-        }).toList();
+        return response;
+    });
     }
 }
