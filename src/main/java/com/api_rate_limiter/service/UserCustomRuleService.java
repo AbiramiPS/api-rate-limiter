@@ -12,6 +12,8 @@ import com.api_rate_limiter.repository.UserPlanRepository;
 import com.api_rate_limiter.mapper.UserCustomRuleMapper;
 import com.api_rate_limiter.dto.request.UserCustomRuleRequest;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 @Service
 public class UserCustomRuleService {
 
@@ -20,6 +22,7 @@ private UserCustomRuleRepository repo;
 
 @Autowired
 private UserPlanRepository userRepo;
+
 @Autowired
 private UserCustomRuleMapper mapper;
 /*GET*/
@@ -46,5 +49,10 @@ public UserCustomRuleResponse saveRule(UserCustomRuleRequest request) {
     rule.setUser(user);
     UserCustomRule saved = repo.save(rule);
     return mapper.toResponse(saved);
+}
+
+public Page<UserCustomRuleResponse> searchUsers(String user, Pageable pageable) {
+    return repo.findByUserContainingIgnoreCase(user, pageable)
+    .map(mapper::toResponse);
 }
 }

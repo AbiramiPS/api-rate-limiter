@@ -15,6 +15,8 @@ import com.api_rate_limiter.service.UserCustomRuleService;
 import com.api_rate_limiter.service.UserPlanService;
 
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 
 @RestController
 @RequestMapping("/admin/custom-rules")
@@ -33,27 +35,31 @@ public class UserCustomRuleController {
 
     @GetMapping("/{clientId}")
 
+    public ResponseEntity<UserCustomRuleResponse> getCustomRule(@PathVariable String clientId) {
 
-public ResponseEntity<UserCustomRuleResponse> getCustomRule(@PathVariable String clientId) {
+        UserPlan user = userPlanService.getUserPlanEntity(clientId);
 
-    UserPlan user = userPlanService.getUserPlanEntity(clientId);
+        UserCustomRuleResponse response = customService.getRule(user.getId());
 
-    UserCustomRuleResponse response = customService.getRule(user.getId());
-
-    return ResponseEntity.ok(response);
+        return ResponseEntity.ok(response);
     }
 
     /*
      * CREATE CUSTOM RULE
      */
 
-  
-@PostMapping
-public ResponseEntity<UserCustomRuleResponse> createRule(
-        @Valid @RequestBody UserCustomRuleRequest request) {
+    @PostMapping
+    public ResponseEntity<UserCustomRuleResponse> createRule(
+            @Valid @RequestBody UserCustomRuleRequest request) {
 
-    UserCustomRuleResponse response = customService.saveRule(request);
+        UserCustomRuleResponse response = customService.saveRule(request);
 
-    return ResponseEntity.status(HttpStatus.CREATED).body(response);
-}
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<Page<UserCustomRuleResponse>> searchUsers(@RequestParam String user, Pageable pageable) {
+
+        return ResponseEntity.ok(customService.searchUsers(user, pageable));
+    }
 }

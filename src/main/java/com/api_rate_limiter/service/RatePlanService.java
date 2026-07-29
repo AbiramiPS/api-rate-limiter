@@ -38,4 +38,9 @@ public class RatePlanService {
                 Page<RatePlan> plans = repository.findAll(pageable);
                 return plans.map(mapper::toResponse);
         }
+
+        public Page<RatePlanResponse> searchPlans(String planName, Pageable pageable) {
+                Page<RatePlan> plans = repository.findByPlanNameContainingIgnoreCase(planName, pageable);
+                return plans.map(mapper::toResponse);
+        }
 }

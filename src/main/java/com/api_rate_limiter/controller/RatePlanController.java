@@ -44,4 +44,9 @@ public class RatePlanController {
         public ResponseEntity<Page<RatePlanResponse>> getAll(Pageable pageable) {
                 return ResponseEntity.ok(ratePlanService.getAll(pageable));
         }
+
+        @GetMapping("/search")
+        public ResponseEntity<Page<RatePlanResponse>> searchPlans(@RequestParam String planName, Pageable pageable) {
+                return ResponseEntity.ok(ratePlanService.searchPlans(planName, pageable));
+        }
 }

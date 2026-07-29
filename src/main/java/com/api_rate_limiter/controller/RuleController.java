@@ -11,7 +11,8 @@ import org.springframework.http.HttpStatus;
 
 import com.api_rate_limiter.dto.request.RatePlanRuleRequest;
 import com.api_rate_limiter.dto.response.RatePlanRuleResponse;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 @RestController
 @RequestMapping("/admin/rules")
 public class RuleController {
@@ -36,5 +37,13 @@ public ResponseEntity<RatePlanRuleResponse> getRule(
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    
+    @GetMapping("/search")
+    public ResponseEntity<Page<RatePlanRuleResponse>> searchRules(@RequestParam String planName, Pageable pageable) {
+        return ResponseEntity.ok(ruleService.searchRules(planName, pageable));
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<RatePlanRuleResponse>> getAll(Pageable pageable) {
+        return ResponseEntity.ok(ruleService.getAll(pageable));
+    }
 }
