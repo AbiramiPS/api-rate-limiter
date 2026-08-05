@@ -15,7 +15,7 @@ import com.api_rate_limiter.exception.DuplicateResourceException;
 import com.api_rate_limiter.exception.ResourceNotFoundException;
 import java.util.List;
 import org.springframework.data.domain.Page;
-
+import com.api_rate_limiter.dto.request.UserPlanRequest;
 @Service
 public class UserPlanService {
 
@@ -113,5 +113,63 @@ public class UserPlanService {
 
         return repo.findByClientNameContainingIgnoreCase(clientName, pageable)
                 .map(this::toResponse);
+    }
+
+    public UserPlanResponse updateUserPlan(
+            String clientId,
+            UserPlanRequest request) {
+
+        UserPlan user = repo.findByClientId(clientId);
+
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        RatePlan plan = planRepo.findById(request.getPlanId())
+                .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+
+        if (user.getPlan().getId().equals(plan.getId())) {
+            throw new DuplicateResourceException("User is already using this plan");
+        }
+
+        user.setPlan(plan);
+        user.setClientName(request.getClientName());
+        user.setCustomRuleEnabled(request.getCustomRuleEnabled());
+
+        UserPlan updated = repo.save(user);
+
+        return toResponse(updated);
+    }
+    
+    public UserPlanResponse patchUserPlan(
+            String clientId,
+            UserPlanRequest request) {
+        UserPlan user = repo.findByClientId(clientId);
+
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+        if (request.getClientName() != null) {
+            user.setClientName(request.getClientName());
+        }
+        if (request.getPlanId() != null) {
+            RatePlan plan = planRepo.findById(request.getPlanId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+
+            user.setPlan(plan);
+        }
+        if (request.getCustomRuleEnabled() != null) {
+            user.setCustomRuleEnabled(request.getCustomRuleEnabled());
+        }
+        UserPlan updated = repo.save(user);
+        return toResponse(updated);
+    }
+    
+    public void deleteUserPlan(String clientId) {
+        UserPlan user = repo.findByClientId(clientId);
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+        repo.delete(user);
     }
 }
