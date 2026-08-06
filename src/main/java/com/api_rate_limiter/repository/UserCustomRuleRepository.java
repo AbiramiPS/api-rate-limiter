@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 @Repository
 public interface UserCustomRuleRepository extends JpaRepository<UserCustomRule, Long> {
     UserCustomRule findByUser(UserPlan user);
-
-    Page<UserCustomRule> findByUserContainingIgnoreCase(String user, Pageable pageable);
+    Page<UserCustomRule> findByUser_ClientNameContainingIgnoreCase(
+            String clientName,
+            Pageable pageable);
 }

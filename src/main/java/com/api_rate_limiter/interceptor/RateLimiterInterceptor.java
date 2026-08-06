@@ -33,6 +33,6 @@ public class RateLimiterInterceptor implements HandlerInterceptor {
             logger.warn("Rate limit exceeded for {}", clientId);
             return false; // Deny the request
         }
-        return true; // Allow the request to proceed
+        return true; 
     }
 }
