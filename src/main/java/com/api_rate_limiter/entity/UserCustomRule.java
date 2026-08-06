@@ -3,7 +3,8 @@ package com.api_rate_limiter.entity;
 import jakarta.persistence.*;
 
 import lombok.*;
-
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 @Entity
 @Data
 @NoArgsConstructor
@@ -23,5 +24,11 @@ private UserPlan user;
 private Integer maxRequests;
 private Integer windowValue;
 private String windowUnit;
+private BigDecimal price;
 
+private Boolean active;
+
+private LocalDateTime createdAt;
+
+private LocalDateTime updatedAt;
 }

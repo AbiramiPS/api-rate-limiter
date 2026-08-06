@@ -18,5 +18,6 @@ public class RatePlan {
 @Column(unique = true)
     private String planName;
     private Boolean active;
-
+    private Integer price;
+    private String description;
 }

@@ -1,24 +1,46 @@
 package com.api_rate_limiter.service;
 
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.api_rate_limiter.dto.request.RatePlanRequest;
+import com.api_rate_limiter.dto.response.RatePlanResponse;
 import com.api_rate_limiter.entity.RatePlan;
+import com.api_rate_limiter.mapper.RatePlanMapper;
 import com.api_rate_limiter.repository.RatePlanRepository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 @Service
 public class RatePlanService {
-    @Autowired
-    private RatePlanRepository repo;
-    public RatePlan getPlan(String name) {
-        return repo.findByPlanName(name);
-    }
 
-    public RatePlan savePlan(RatePlan plan) {
-        return repo.save(plan);
-    }
+        @Autowired
+        private RatePlanRepository repository;
 
-    public List<RatePlan> getAll() {
-        return repo.findAll();
-    }
+        @Autowired
+        private RatePlanMapper mapper;
+
+        public RatePlanResponse savePlan(RatePlanRequest request) {
+                RatePlan plan = mapper.toEntity(request);
+                RatePlan saved = repository.save(plan);
+                return mapper.toResponse(saved);
+        }
+
+        public RatePlanResponse getPlan(String planName) {
+                RatePlan plan = repository.findByPlanName(planName).orElseThrow(() -> new RuntimeException("Plan not found"));
+                return mapper.toResponse(plan);
+        }
+
+        public Page<RatePlanResponse> getAll(Pageable pageable) {
+                Page<RatePlan> plans = repository.findAll(pageable);
+                return plans.map(mapper::toResponse);
+        }
+
+        public Page<RatePlanResponse> searchPlans(String planName, Pageable pageable) {
+                Page<RatePlan> plans = repository.findByPlanNameContainingIgnoreCase(planName, pageable);
+                return plans.map(mapper::toResponse);
+        }
 }
