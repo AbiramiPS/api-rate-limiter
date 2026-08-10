@@ -3,17 +3,27 @@ package com.api_rate_limiter.service;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 @Service
 public class RedisService {
     @Autowired
     public RedisTemplate<String,Integer> redisTemplate;
 
-    public void saveValue(String key, Integer value) {
-        redisTemplate.opsForValue().set(key, value);
-    }
+    @Autowired
+private RedisConnectionFactory connectionFactory;
+
+@GetMapping("/redis-info")
+public String redisInfo() {
+
+    return "Redis Factory = "
+            + connectionFactory.getClass().getName();
+}
     
     public Integer getValue(String key) {
         return redisTemplate.opsForValue().get(key);
@@ -73,6 +83,15 @@ public class RedisService {
 
         redisTemplate.delete("rate_limit:" + clientId);
 
+    }
+
+    public void saveValue(String key, Integer value) {
+
+        redisTemplate.opsForValue().set(key, value);
+
+        System.out.println("Saved Key : " + key);
+        System.out.println("Saved Value : " + value);
+        System.out.println("Keys in Redis : " + redisTemplate.keys("*"));
     }
 
 }
