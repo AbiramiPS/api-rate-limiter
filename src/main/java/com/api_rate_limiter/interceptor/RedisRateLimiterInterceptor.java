@@ -6,11 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import com.api_rate_limiter.dto.response.RedisRateLimitResultResponse;
 import com.api_rate_limiter.service.RedisRateLimiterService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
+
 @Component
 public class RedisRateLimiterInterceptor implements HandlerInterceptor {
 
@@ -21,31 +22,71 @@ public class RedisRateLimiterInterceptor implements HandlerInterceptor {
     public boolean preHandle(
             HttpServletRequest request,
             HttpServletResponse response,
-            Object handler) throws IOException{
+            Object handler) throws IOException {
 
-        // Get client ID from request header
         String clientId = request.getHeader("X-clientId");
 
         // Client ID is mandatory
         if (clientId == null || clientId.isBlank()) {
-            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+
+            response.setStatus(
+                    HttpServletResponse.SC_BAD_REQUEST);
+
             return false;
         }
 
-        // Ask Redis rate limiter whether request is allowed
-        boolean allowed = rateLimiterService.isAllowed(clientId);
+        RedisRateLimitResultResponse result;
+
+        try {
+
+            result = rateLimiterService.checkRateLimit(clientId);
+
+        } catch (Exception e) {
+
+            // Redis / rate limiter failure
+            response.setStatus(
+                    HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+
+            response.setContentType("application/json");
+
+            response.getWriter().write(
+                    "{\"message\":\"Rate limiting service is temporarily unavailable\"}");
+
+            return false;
+        }
+
+        // Add rate-limit headers
+        response.setHeader(
+                "X-RateLimit-Limit",
+                String.valueOf(result.getLimit()));
+
+        response.setHeader(
+                "X-RateLimit-Remaining",
+                String.valueOf(result.getRemaining()));
+
+        response.setHeader(
+                "X-RateLimit-Reset",
+                String.valueOf(result.getResetTime()));
 
         // Rate limit exceeded
-        if (!allowed) {
+        if (!result.isAllowed()) {
+
             response.setStatus(429);
+
             response.setContentType("application/json");
+
             response.getWriter().write(
-                    "{\"message\":\"Rate limit exceeded. Please try again later.\"}");
+                    "{"
+                            + "\"status\":429,"
+                            + "\"message\":\"Rate limit exceeded\","
+                            + "\"retryAfter\":"
+                            + result.getResetTime()
+                            + "}");
 
             return false;
         }
 
-        // Request is allowed
+        // Request allowed
         return true;
     }
 }

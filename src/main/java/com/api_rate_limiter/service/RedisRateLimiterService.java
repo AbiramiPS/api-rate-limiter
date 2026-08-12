@@ -6,7 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.api_rate_limiter.dto.internal.RedisResolvedRule;
-
+import com.api_rate_limiter.dto.response.RedisRateLimitResultResponse;
+import com.api_rate_limiter.dto.response.RedisRuleCacheResponse;
 @Service
 public class RedisRateLimiterService {
 
@@ -16,19 +17,36 @@ public class RedisRateLimiterService {
     @Autowired
     private RedisRuleResolverService redisRuleResolverService;
 
-    public boolean isAllowed(String clientId) {
+    public RedisRateLimitResultResponse checkRateLimit(String clientId) {
 
-        RedisResolvedRule rule = redisRuleResolverService.resolveRedisRule(clientId);
+        // Get the rule applicable to this client
+        RedisRuleCacheResponse rule = redisRuleResolverService.resolveRedisRule(clientId);
+
+        int maxRequests = rule.getMaxRequests();
 
         long windowSeconds = convertToSeconds(
                 rule.getWindowValue(),
                 rule.getWindowUnit());
 
-        int count = redisService.incrementRequest(
+        // Increment Redis counter
+        int currentCount = redisService.incrementRequest(
                 clientId,
                 windowSeconds);
 
-        return count <= rule.getMaxRequests();
+        // Remaining requests
+        int remaining = Math.max(0, maxRequests - currentCount);
+
+        // Remaining TTL
+        long resetTime = redisService.getRemainingTime(clientId);
+
+        // Check whether request is allowed
+        boolean allowed = currentCount <= maxRequests;
+
+        return new RedisRateLimitResultResponse(
+                allowed,
+                maxRequests,
+                remaining,
+                resetTime);
     }
 
     private long convertToSeconds(
@@ -57,5 +75,5 @@ public class RedisRateLimiterService {
                 throw new IllegalArgumentException("Invalid Window Unit");
         }
     }
-    
+
 }

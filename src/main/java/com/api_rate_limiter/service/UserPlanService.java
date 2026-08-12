@@ -16,6 +16,7 @@ import com.api_rate_limiter.exception.ResourceNotFoundException;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import com.api_rate_limiter.dto.request.UserPlanRequest;
+
 @Service
 public class UserPlanService {
 
@@ -37,14 +38,14 @@ public class UserPlanService {
 
         return response;
     }
+
     public UserPlanResponse saveUserPlan(UserPlanRequest request) {
         // Check if clientId already exists
         if (repo.findByClientId(request.getClientId()) != null) {
             throw new DuplicateResourceException("Client ID already exists");
         }
         Long planId = request.getPlanId(); // to get the plan id
-        RatePlan plan = planRepo.findById(planId).orElseThrow(() -> 
-        new ResourceNotFoundException("Plan not found"));
+        RatePlan plan = planRepo.findById(planId).orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
 
         UserPlan user = new UserPlan();
 
@@ -82,7 +83,7 @@ public class UserPlanService {
         // response.setPlanName(user.getPlan().getPlanName());
         // response.setCustomRuleEnabled(user.isCustomRuleEnabled());
         // return response;
-    return toResponse(user);
+        return toResponse(user);
     }
 
     public UserPlan getUserPlanEntity(String clientId) {
@@ -96,17 +97,17 @@ public class UserPlanService {
     public Page<UserPlanResponse> getAll(Pageable pageable) {
         Page<UserPlan> users = repo.findAll(pageable);
         return users.map(this::toResponse);
-    // return users.map(user -> {
-    //     UserPlanResponse response = new UserPlanResponse();
+        // return users.map(user -> {
+        // UserPlanResponse response = new UserPlanResponse();
 
-    //     response.setId(user.getId());
-    //     response.setClientId(user.getClientId());
-    //     response.setClientName(user.getClientName());
-    //     response.setPlanName(user.getPlan().getPlanName());
-    //     response.setCustomRuleEnabled(user.isCustomRuleEnabled());
+        // response.setId(user.getId());
+        // response.setClientId(user.getClientId());
+        // response.setClientName(user.getClientName());
+        // response.setPlanName(user.getPlan().getPlanName());
+        // response.setCustomRuleEnabled(user.isCustomRuleEnabled());
 
-    //     return response;
-    // });
+        // return response;
+        // });
     }
 
     public Page<UserPlanResponse> searchUsers(String clientName, Pageable pageable) {
@@ -140,7 +141,7 @@ public class UserPlanService {
 
         return toResponse(updated);
     }
-    
+
     public UserPlanResponse patchUserPlan(
             String clientId,
             UserPlanRequest request) {
@@ -164,7 +165,7 @@ public class UserPlanService {
         UserPlan updated = repo.save(user);
         return toResponse(updated);
     }
-    
+
     public void deleteUserPlan(String clientId) {
         UserPlan user = repo.findByClientId(clientId);
         if (user == null) {
