@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { RatePlan } from '@/types';
+import { RatePlanResponse, Page } from '@/types/api';
 import { DataTable, Column } from '../ui/DataTable';
-import { RateLimiterStore } from '@/lib/services/store';
-import { formatRuleSpec } from '@/lib/utils';
+import { EmptyState } from '../ui/EmptyState';
+import { ErrorState } from '../ui/ErrorState';
+import { RatePlanService, ApiError } from '@/services/ratePlanService';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../providers/ToastProvider';
 import { Eye, Edit3, Trash2, Layers, CheckCircle2, Users } from 'lucide-react';
@@ -15,81 +16,113 @@ export function PlanTable() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [plans, setPlans] = useState<RatePlan[]>(RateLimiterStore.getPlans());
-  const [planToDelete, setPlanToDelete] = useState<RatePlan | null>(null);
+  const [plans, setPlans] = useState<RatePlanResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [planToDelete, setPlanToDelete] = useState<RatePlanResponse | null>(null);
+  const [pagination, setPagination] = useState({
+    page: 0,
+    size: 100,
+    totalElements: 0,
+    totalPages: 0,
+  });
+
+  const fetchPlans = useCallback(async (page: number = 0) => {
+    try {
+      setError(null);
+      setLoading(true);
+      const data: Page<RatePlanResponse> = await RatePlanService.getAllPlans(page, pagination.size);
+      setPlans(data.content);
+      setPagination({
+        page: data.number,
+        size: data.size,
+        totalElements: data.totalElements,
+        totalPages: data.totalPages,
+      });
+    } catch (error) {
+      const apiError = error as ApiError;
+      setError(apiError.message || 'Failed to load plans');
+      handleApiError(apiError, 'Failed to load plans');
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.size]);
+
+  useEffect(() => {
+    fetchPlans(0);
+  }, [fetchPlans]);
 
   const refreshData = () => {
-    setPlans(RateLimiterStore.getPlans());
+    fetchPlans(pagination.page);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleApiError = (error: ApiError, defaultMessage: string) => {
+    let message = defaultMessage;
+    if (error.status === 400) {
+      message = 'Invalid request. Please check your input.';
+    } else if (error.status === 404) {
+      message = 'Resource not found.';
+    } else if (error.status === 409) {
+      message = 'Resource already exists.';
+    } else if (error.status === 429) {
+      message = 'Too many requests. Please try again later.';
+    } else if (error.status === 500) {
+      message = 'Server error. Please try again later.';
+    } else if (error.status === 503) {
+      message = 'Service unavailable. Please try again later.';
+    } else if (error.message) {
+      message = error.message;
+    }
+    toast('Error', message, 'error');
+  };
+
+  const handleDeleteConfirm = async () => {
     if (!planToDelete) return;
     try {
-      RateLimiterStore.deletePlan(planToDelete.id);
-      toast('Plan Deleted', `Removed rate plan '${planToDelete.name}'`, 'success');
+      await RatePlanService.deletePlan(planToDelete.planName);
+      toast('Plan Deleted', `Removed rate plan '${planToDelete.planName}'`, 'success');
       setPlanToDelete(null);
       refreshData();
-    } catch (err: any) {
-      toast('Cannot Delete Plan', err.message || 'Error occurred', 'error');
+    } catch (error) {
+      const apiError = error as ApiError;
+      handleApiError(apiError, 'Failed to delete plan');
     }
   };
 
-  const columns: Column<RatePlan>[] = [
+  const columns: Column<RatePlanResponse>[] = [
     {
-      header: 'Plan Name & Code',
-      accessorKey: 'name',
+      header: 'Plan Name',
+      accessorKey: 'planName',
       cell: (plan) => (
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center font-bold text-xs text-indigo-700 shrink-0">
             <Layers className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/plans/${plan.id}`}
-                className="font-bold text-slate-900 hover:text-indigo-600 transition-colors text-sm"
-              >
-                {plan.name}
-              </Link>
-              {plan.isDefault && (
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
-                  DEFAULT
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 font-mono mt-0.5">{plan.code}</p>
+            <Link
+              href={`/plans/${plan.planName}`}
+              className="font-bold text-slate-900 hover:text-indigo-600 transition-colors text-sm"
+            >
+              {plan.planName}
+            </Link>
           </div>
         </div>
       ),
     },
     {
-      header: 'Rate Limit Rule Specification',
+      header: 'Status',
+      accessorKey: 'active',
       cell: (plan) => (
-        <div>
-          <span className="font-mono font-bold text-slate-900 text-xs block">
-            {formatRuleSpec(plan.maxRequests, plan.windowValue, plan.windowUnit)}
-          </span>
-          <span className="text-[11px] text-slate-400">
-            Window TTL: {plan.windowValue} {plan.windowUnit.toLowerCase()}
-          </span>
-        </div>
-      ),
-    },
-    {
-      header: 'Assigned Clients',
-      accessorKey: 'userCount',
-      cell: (plan) => (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-          <Users className="w-3.5 h-3.5 text-slate-400" />
-          <span>{plan.userCount} clients</span>
-        </div>
-      ),
-    },
-    {
-      header: 'Description',
-      accessorKey: 'description',
-      cell: (plan) => (
-        <span className="text-xs text-slate-500 max-w-xs truncate block">{plan.description}</span>
+        <span
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+            plan.active
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-slate-50 text-slate-500 border-slate-200'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${plan.active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+          {plan.active ? 'ACTIVE' : 'INACTIVE'}
+        </span>
       ),
     },
     {
@@ -98,14 +131,18 @@ export function PlanTable() {
       cell: (plan) => (
         <div className="flex items-center justify-end gap-1">
           <Link
-            href={`/plans/${plan.id}`}
+            href={`/plans/${plan.planName}`}
             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            title="View or Edit Plan"
+            title="View Plan"
+            onClick={(e) => e.stopPropagation()}
           >
             <Eye className="w-4 h-4" />
           </Link>
           <button
-            onClick={() => setPlanToDelete(plan)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPlanToDelete(plan);
+            }}
             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
             title="Delete Plan"
           >
@@ -118,22 +155,34 @@ export function PlanTable() {
 
   return (
     <>
-      <DataTable
-        data={plans}
-        columns={columns}
-        searchKey="name"
-        searchPlaceholder="Search plans..."
-        emptyTitle="No Rate Plans"
-        emptyDescription="Create a new rate plan to get started."
-        onRowClick={(p) => router.push(`/plans/${p.id}`)}
-      />
+      {loading ? (
+        <div className="p-8 text-center text-slate-500 text-sm">Loading rate plans...</div>
+      ) : error ? (
+        <div className="p-6">
+          <ErrorState title="Unable to load rate plans" description={error} />
+        </div>
+      ) : plans.length === 0 ? (
+        <div className="p-6">
+          <EmptyState title="No Rate Plans" description="Create a new rate plan to get started." />
+        </div>
+      ) : (
+        <DataTable
+          data={plans}
+          columns={columns}
+          searchKey="planName"
+          searchPlaceholder="Search plans..."
+          emptyTitle="No Rate Plans"
+          emptyDescription="Create a new rate plan to get started."
+          onRowClick={(p) => router.push(`/plans/${p.planName}`)}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={Boolean(planToDelete)}
         onClose={() => setPlanToDelete(null)}
         onConfirm={handleDeleteConfirm}
         title="Delete Rate Plan"
-        description={`Are you sure you want to delete rate plan '${planToDelete?.name}'? Note that plans with active users cannot be deleted.`}
+        description={`Are you sure you want to delete rate plan '${planToDelete?.planName}'?`}
         confirmText="Delete Plan"
         variant="danger"
       />

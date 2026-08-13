@@ -2,14 +2,14 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RatePlan, WindowUnit } from '@/types';
-import { RateLimiterStore } from '@/lib/services/store';
+import { RatePlanRequest, RatePlanResponse } from '@/types/api';
+import { RatePlanService, ApiError } from '@/services/ratePlanService';
 import { useToast } from '../providers/ToastProvider';
 import { ArrowLeft, Save, Layers } from 'lucide-react';
 import Link from 'next/link';
 
 interface PlanFormProps {
-  initialPlan?: RatePlan;
+  initialPlan?: RatePlanResponse;
   isEdit?: boolean;
 }
 
@@ -17,53 +17,58 @@ export function PlanForm({ initialPlan, isEdit = false }: PlanFormProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [name, setName] = useState(initialPlan?.name || '');
-  const [code, setCode] = useState(initialPlan?.code || '');
-  const [description, setDescription] = useState(initialPlan?.description || '');
-  const [maxRequests, setMaxRequests] = useState(initialPlan?.maxRequests || 20);
-  const [windowValue, setWindowValue] = useState(initialPlan?.windowValue || 1);
-  const [windowUnit, setWindowUnit] = useState<WindowUnit>(initialPlan?.windowUnit || 'MINUTE');
-  const [isDefault, setIsDefault] = useState(initialPlan?.isDefault || false);
+  const [planName, setPlanName] = useState(initialPlan?.planName || '');
+  const [active, setActive] = useState(initialPlan?.active ?? true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleApiError = (error: ApiError, defaultMessage: string) => {
+    let message = defaultMessage;
+    if (error.status === 400) {
+      message = 'Invalid request. Please check your input.';
+    } else if (error.status === 404) {
+      message = 'Resource not found.';
+    } else if (error.status === 409) {
+      message = 'Resource already exists.';
+    } else if (error.status === 429) {
+      message = 'Too many requests. Please try again later.';
+    } else if (error.status === 500) {
+      message = 'Server error. Please try again later.';
+    } else if (error.status === 503) {
+      message = 'Service unavailable. Please try again later.';
+    } else if (error.message) {
+      message = error.message;
+    }
+    toast('Error', message, 'error');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim() || maxRequests <= 0 || windowValue <= 0) {
-      toast('Validation Error', 'Please check all required rate limit parameters.', 'error');
+    if (!planName.trim()) {
+      toast('Validation Error', 'Plan name is required.', 'error');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
+      const request: RatePlanRequest = {
+        planName: planName.trim(),
+        active,
+      };
+
       if (isEdit && initialPlan) {
-        RateLimiterStore.updatePlan(initialPlan.id, {
-          name,
-          code: code.toUpperCase(),
-          description,
-          maxRequests: Number(maxRequests),
-          windowValue: Number(windowValue),
-          windowUnit,
-          isDefault,
-        });
-        toast('Rate Plan Saved', `Updated rate plan '${name}'.`, 'success');
-        router.push(`/plans/${initialPlan.id}`);
+        await RatePlanService.updatePlan(initialPlan.planName, request);
+        toast('Plan Updated', `Rate plan '${planName}' has been updated.`, 'success');
+        router.push(`/plans/${planName}`);
       } else {
-        const newPlan = RateLimiterStore.createPlan({
-          name,
-          code: code.toUpperCase(),
-          description,
-          maxRequests: Number(maxRequests),
-          windowValue: Number(windowValue),
-          windowUnit,
-          isDefault,
-        });
-        toast('Rate Plan Created', `Added new rate plan '${name}'.`, 'success');
-        router.push(`/plans/${newPlan.id}`);
+        const newPlan = await RatePlanService.createPlan(request);
+        toast('Plan Created', `Successfully created rate plan '${planName}'.`, 'success');
+        router.push(`/plans/${newPlan.planName}`);
       }
-    } catch (err: any) {
-      toast('Failed to Save Plan', err.message || 'Error occurred', 'error');
+    } catch (error) {
+      const apiError = error as ApiError;
+      handleApiError(apiError, 'Failed to save plan');
       setIsSubmitting(false);
     }
   };
@@ -73,116 +78,46 @@ export function PlanForm({ initialPlan, isEdit = false }: PlanFormProps) {
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
           <Layers className="w-4 h-4 text-indigo-600" />
-          Plan Identity & Metadata
+          Plan Details
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Plan Display Name <span className="text-rose-500">*</span>
+              Plan Name <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Professional Tier"
-              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              value={planName}
+              onChange={(e) => setPlanName(e.target.value.toUpperCase())}
+              placeholder="e.g. FREE, PREMIUM, ENTERPRISE"
+              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl font-mono focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               required
+              disabled={isEdit}
             />
+            <p className="text-[10px] text-slate-400 mt-1">Unique identifier for the rate plan</p>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Plan Code Symbol <span className="text-rose-500">*</span>
-            </label>
+          <div className="flex items-center gap-3 pt-6">
             <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="e.g. PRO_SCALE"
-              className="w-full px-3 py-2 text-xs md:text-sm bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-              required
+              type="checkbox"
+              id="active"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
             />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Description / Intended Purpose
+            <label htmlFor="active" className="text-xs font-semibold text-slate-700">
+              Active
             </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="e.g. Designed for production workloads requiring up to 50 req/min..."
-              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-            />
+            <p className="text-[10px] text-slate-400">When enabled, this plan can be assigned to new users</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
-          Rate Limit Rule Specification
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Max Requests Allowed <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={maxRequests}
-              onChange={(e) => setMaxRequests(Number(e.target.value))}
-              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Window Value <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={windowValue}
-              onChange={(e) => setWindowValue(Number(e.target.value))}
-              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Window Time Unit <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={windowUnit}
-              onChange={(e) => setWindowUnit(e.target.value as WindowUnit)}
-              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="SECOND">SECOND</option>
-              <option value="MINUTE">MINUTE</option>
-              <option value="HOUR">HOUR</option>
-              <option value="DAY">DAY</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="pt-2 flex items-center gap-3">
-          <input
-            type="checkbox"
-            id="isDefault"
-            checked={isDefault}
-            onChange={(e) => setIsDefault(e.target.checked)}
-            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
-          />
-          <label htmlFor="isDefault" className="text-xs font-semibold text-slate-700">
-            Set as Default Plan for new registered users
-          </label>
-        </div>
+      <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200/80">
+        <p className="text-xs text-amber-800">
+          <strong>Note:</strong> Rate limit rules (maxRequests, windowValue, windowUnit) are configured separately through the Rules management interface.
+        </p>
       </div>
 
       <div className="flex items-center justify-between pt-2">

@@ -7,6 +7,7 @@ import { UserPlanResponse, Page } from '@/types/api';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/EmptyState';
+import { ErrorState } from '../ui/ErrorState';
 import { useToast } from '../providers/ToastProvider';
 import { UserPlanService, ApiError } from '@/services/userPlanService';
 import { Eye, Edit3, Trash2, Zap, Shield, Plus, SlidersHorizontal, Search, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -30,6 +31,7 @@ export function UserTable({ initialUsers }: UserTableProps) {
   const [users, setUsers] = useState<UserPlanResponse[]>(initialUsers || []);
   const [loading, setLoading] = useState<boolean>(!initialUsers);
   const [searching, setSearching] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>('ALL');
   const [ruleTypeFilter, setRuleTypeFilter] = useState<string>('ALL');
   const [userToDelete, setUserToDelete] = useState<UserPlanResponse | null>(null);
@@ -44,6 +46,7 @@ export function UserTable({ initialUsers }: UserTableProps) {
 
   const fetchUsers = useCallback(async (page: number = 0, search?: string) => {
     try {
+      setError(null);
       if (search) {
         setSearching(true);
         const data: Page<UserPlanResponse> = await UserPlanService.searchUsers(search, page, pagination.size);
@@ -67,6 +70,7 @@ export function UserTable({ initialUsers }: UserTableProps) {
       }
     } catch (error) {
       const apiError = error as ApiError;
+      setError(apiError.message || 'Failed to load users');
       handleApiError(apiError, 'Failed to load users');
     } finally {
       setLoading(false);
@@ -198,18 +202,31 @@ export function UserTable({ initialUsers }: UserTableProps) {
             href={`/users/${user.clientId}`}
             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
             title="View details"
+            onClick={(e) => e.stopPropagation()}
           >
             <Eye className="w-4 h-4" />
+          </Link>
+          <Link
+            href={`/users/${user.clientId}/edit`}
+            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit user"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Edit3 className="w-4 h-4" />
           </Link>
           <Link
             href={`/custom-rules/${user.clientId}`}
             className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
             title="Configure Custom Rule"
+            onClick={(e) => e.stopPropagation()}
           >
             <Zap className="w-4 h-4" />
           </Link>
           <button
-            onClick={() => setUserToDelete(user)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setUserToDelete(user);
+            }}
             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
             title="Delete user"
           >
@@ -285,7 +302,11 @@ export function UserTable({ initialUsers }: UserTableProps) {
 
         {/* Table */}
         {loading ? (
-          <div className="p-8 text-center text-slate-500 text-sm">Loading...</div>
+          <div className="p-8 text-center text-slate-500 text-sm">Loading clients...</div>
+        ) : error ? (
+          <div className="p-6">
+            <ErrorState title="Unable to load clients" description={error} />
+          </div>
         ) : filteredUsers.length === 0 ? (
           <div className="p-6">
             <EmptyState title="No Clients Found" description="No clients match your filter criteria. Click below to add a client." />

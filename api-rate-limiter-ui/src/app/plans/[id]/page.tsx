@@ -1,15 +1,59 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { useState, useEffect } from 'react';
+import { notFound } from 'next/navigation';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PlanDetailView } from '@/components/plans/PlanDetailView';
-import { RateLimiterStore } from '@/lib/services/store';
+import { RatePlanResponse } from '@/types/api';
+import { RatePlanService, ApiError } from '@/services/ratePlanService';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { useToast } from '@/components/providers/ToastProvider';
 
 export default function PlanDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const plan = RateLimiterStore.getPlanById(id);
+  const { id } = React.use(params);
+  const [plan, setPlan] = useState<RatePlanResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadPlan = async () => {
+      try {
+        const planData = await RatePlanService.getPlanByName(id);
+        setPlan(planData);
+      } catch (error) {
+        const apiError = error as ApiError;
+        if (apiError.status === 404) {
+          notFound();
+        } else {
+          let message = 'Failed to load plan details';
+          if (apiError.status === 500) message = 'Server error. Please try again later.';
+          else if (apiError.status === 503) message = 'Service unavailable. Please try again later.';
+          else if (apiError.message) message = apiError.message;
+          toast('Error', message, 'error');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPlan();
+  }, [id, toast]);
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <PageHeader
+          title="Loading..."
+          breadcrumbs={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'Rate Plans', href: '/plans' },
+            { label: id },
+          ]}
+        />
+        <div className="p-8 text-center text-slate-500 text-sm">Loading plan details...</div>
+      </MainLayout>
+    );
+  }
 
   if (!plan) {
     return (
@@ -33,12 +77,12 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <MainLayout>
       <PageHeader
-        title={`Rate Plan: ${plan.name}`}
-        description={`View plan rule details and clients currently assigned to ${plan.code}`}
+        title={`Rate Plan: ${plan.planName}`}
+        description={`View plan details for ${plan.planName}`}
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Rate Plans', href: '/plans' },
-          { label: plan.name },
+          { label: plan.planName },
         ]}
       />
 

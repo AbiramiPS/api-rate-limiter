@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { UserPlanResponse } from '@/types/api';
 import { StatusBadge } from '../ui/StatusBadge';
-import { Zap, ArrowLeft } from 'lucide-react';
+import { Zap, ArrowLeft, Edit3 } from 'lucide-react';
 
 interface UserDetailViewProps {
   user: UserPlanResponse;
@@ -30,6 +30,13 @@ export function UserDetailView({ user }: UserDetailViewProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href={`/users/${user.clientId}/edit`}
+            className="px-4 py-2 text-xs font-semibold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors flex items-center gap-1.5"
+          >
+            <Edit3 className="w-4 h-4 text-indigo-600" />
+            Edit Client
+          </Link>
           <Link
             href={`/custom-rules/${user.clientId}`}
             className="px-4 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-colors flex items-center gap-1.5"

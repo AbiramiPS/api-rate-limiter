@@ -95,8 +95,17 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
       };
 
       if (isEdit && initialUser) {
+        // Check if plan is changing
+        const planChanged = initialUser.planId !== planId;
+        
         await UserPlanService.updateUser(initialUser.clientId, request);
-        toast('Client Updated', `Client '${clientName}' configuration saved.`, 'success');
+        
+        if (planChanged) {
+          toast('Client Updated', `Client '${clientName}' configuration saved. Rate plan changed and Redis cache invalidated.`, 'success');
+        } else {
+          toast('Client Updated', `Client '${clientName}' configuration saved.`, 'success');
+        }
+        
         router.push(`/users/${clientId}`);
       } else {
         await UserPlanService.createUser(request);

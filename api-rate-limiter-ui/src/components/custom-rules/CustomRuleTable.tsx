@@ -1,41 +1,85 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserCustomRule } from '@/types';
+import { UserCustomRuleResponse, Page } from '@/types/api';
 import { DataTable, Column } from '../ui/DataTable';
-import { StatusBadge } from '../ui/StatusBadge';
-import { RateLimiterStore } from '@/lib/services/store';
+import { CustomRuleService, ApiError } from '@/services/customRuleService';
 import { formatRuleSpec, formatTimeAgo } from '@/lib/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../providers/ToastProvider';
 import { Eye, Edit3, Trash2, Zap, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { EmptyState } from '../ui/EmptyState';
+import { ErrorState } from '../ui/ErrorState';
 
 export function CustomRuleTable() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [rules, setRules] = useState<UserCustomRule[]>(RateLimiterStore.getCustomRules());
-  const [ruleToDelete, setRuleToDelete] = useState<UserCustomRule | null>(null);
+  const [rules, setRules] = useState<UserCustomRuleResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [ruleToDelete, setRuleToDelete] = useState<UserCustomRuleResponse | null>(null);
+
+  const fetchRules = useCallback(async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      // Search all users to get custom rules
+      const data: Page<UserCustomRuleResponse> = await CustomRuleService.searchCustomRules('', 0, 100);
+      setRules(data.content);
+    } catch (error) {
+      const apiError = error as ApiError;
+      setError(apiError.message || 'Failed to load custom rules');
+      handleApiError(apiError, 'Failed to load custom rules');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRules();
+  }, [fetchRules]);
 
   const refreshData = () => {
-    setRules(RateLimiterStore.getCustomRules());
+    fetchRules();
   };
 
-  const handleDeleteConfirm = () => {
+  const handleApiError = (error: ApiError, defaultMessage: string) => {
+    let message = defaultMessage;
+    if (error.status === 400) {
+      message = 'Invalid request. Please check your input.';
+    } else if (error.status === 404) {
+      message = 'Resource not found.';
+    } else if (error.status === 409) {
+      message = 'Resource already exists.';
+    } else if (error.status === 429) {
+      message = 'Too many requests. Please try again later.';
+    } else if (error.status === 500) {
+      message = 'Server error. Please try again later.';
+    } else if (error.status === 503) {
+      message = 'Service unavailable. Please try again later.';
+    } else if (error.message) {
+      message = error.message;
+    }
+    toast('Error', message, 'error');
+  };
+
+  const handleDeleteConfirm = async () => {
     if (!ruleToDelete) return;
     try {
-      RateLimiterStore.deleteCustomRule(ruleToDelete.clientId);
+      await CustomRuleService.deleteCustomRule(ruleToDelete.clientId);
       toast('Custom Rule Removed', `Removed custom rule for '${ruleToDelete.clientName}' (${ruleToDelete.clientId}). User reverted to Plan rule.`, 'info');
       setRuleToDelete(null);
       refreshData();
-    } catch (err: any) {
-      toast('Failed to Delete Rule', err.message || 'Error occurred', 'error');
+    } catch (error) {
+      const apiError = error as ApiError;
+      handleApiError(apiError, 'Failed to delete custom rule');
     }
   };
 
-  const columns: Column<UserCustomRule>[] = [
+  const columns: Column<UserCustomRuleResponse>[] = [
     {
       header: 'Client ID & Name',
       accessorKey: 'clientName',
@@ -48,6 +92,7 @@ export function CustomRuleTable() {
             <Link
               href={`/custom-rules/${rule.clientId}`}
               className="font-bold text-slate-900 hover:text-indigo-600 transition-colors text-sm block"
+              onClick={(e) => e.stopPropagation()}
             >
               {rule.clientName}
             </Link>
@@ -72,11 +117,11 @@ export function CustomRuleTable() {
       ),
     },
     {
-      header: 'Override Rationale',
-      accessorKey: 'reason',
+      header: 'Price',
+      accessorKey: 'price',
       cell: (rule) => (
-        <span className="text-xs text-slate-600 max-w-xs truncate block italic">
-          {rule.reason || 'No justification specified'}
+        <span className="text-xs text-slate-600 font-medium">
+          ${rule.price?.toFixed(2) || '0.00'}
         </span>
       ),
     },
@@ -91,21 +136,21 @@ export function CustomRuleTable() {
     },
     {
       header: 'Rule Status',
-      accessorKey: 'enabled',
+      accessorKey: 'active',
       cell: (rule) => (
         <span
           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-            rule.enabled
+            rule.active
               ? 'bg-amber-50 text-amber-800 border-amber-200'
               : 'bg-slate-50 text-slate-500 border-slate-200'
           }`}
         >
           <span
             className={`w-1.5 h-1.5 rounded-full ${
-              rule.enabled ? 'bg-amber-500' : 'bg-slate-400'
+              rule.active ? 'bg-amber-500' : 'bg-slate-400'
             }`}
           />
-          {rule.enabled ? 'ACTIVE OVERRIDE' : 'INACTIVE'}
+          {rule.active ? 'ACTIVE OVERRIDE' : 'INACTIVE'}
         </span>
       ),
     },
@@ -118,11 +163,15 @@ export function CustomRuleTable() {
             href={`/custom-rules/${rule.clientId}`}
             className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
             title="Edit Custom Rule"
+            onClick={(e) => e.stopPropagation()}
           >
             <Edit3 className="w-4 h-4" />
           </Link>
           <button
-            onClick={() => setRuleToDelete(rule)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setRuleToDelete(rule);
+            }}
             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
             title="Delete Custom Rule"
           >
@@ -135,15 +184,27 @@ export function CustomRuleTable() {
 
   return (
     <>
-      <DataTable
-        data={rules}
-        columns={columns}
-        searchKey="clientName"
-        searchPlaceholder="Search custom rules..."
-        emptyTitle="No Custom Rules Configured"
-        emptyDescription="Custom rate limit rules are used for Enterprise clients to override default plan limits."
-        onRowClick={(r) => router.push(`/custom-rules/${r.clientId}`)}
-      />
+      {loading ? (
+        <div className="p-8 text-center text-slate-500 text-sm">Loading custom rules...</div>
+      ) : error ? (
+        <div className="p-6">
+          <ErrorState title="Unable to load custom rules" description={error} />
+        </div>
+      ) : rules.length === 0 ? (
+        <div className="p-6">
+          <EmptyState title="No Custom Rules Configured" description="Custom rate limit rules are used for Enterprise clients to override default plan limits." />
+        </div>
+      ) : (
+        <DataTable
+          data={rules}
+          columns={columns}
+          searchKey="clientName"
+          searchPlaceholder="Search custom rules..."
+          emptyTitle="No Custom Rules Configured"
+          emptyDescription="Custom rate limit rules are used for Enterprise clients to override default plan limits."
+          onRowClick={(r) => router.push(`/custom-rules/${r.clientId}`)}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={Boolean(ruleToDelete)}

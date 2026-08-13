@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { UserCustomRule, WindowUnit } from '@/types';
-import { RateLimiterStore } from '@/lib/services/store';
+import { UserCustomRuleRequest, UserCustomRuleResponse, UserPlanResponse, Page } from '@/types/api';
+import { CustomRuleService, ApiError } from '@/services/customRuleService';
+import { UserPlanService } from '@/services/userPlanService';
 import { useToast } from '../providers/ToastProvider';
 import { ArrowLeft, Save, Zap, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 interface CustomRuleFormProps {
-  initialRule?: UserCustomRule;
+  initialRule?: UserCustomRuleResponse;
   targetClientId?: string;
   isEdit?: boolean;
 }
@@ -17,50 +18,111 @@ interface CustomRuleFormProps {
 export function CustomRuleForm({ initialRule, targetClientId, isEdit = false }: CustomRuleFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const users = RateLimiterStore.getUsers();
+
+  const [users, setUsers] = useState<UserPlanResponse[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   const [selectedClientId, setSelectedClientId] = useState<string>(
-    initialRule?.clientId || targetClientId || users[0]?.clientId || 'C-001'
+    initialRule?.clientId || targetClientId || ''
   );
   const [maxRequests, setMaxRequests] = useState<number>(initialRule?.maxRequests || 200);
   const [windowValue, setWindowValue] = useState<number>(initialRule?.windowValue || 1);
-  const [windowUnit, setWindowUnit] = useState<WindowUnit>(initialRule?.windowUnit || 'MINUTE');
-  const [enabled, setEnabled] = useState<boolean>(initialRule?.enabled ?? true);
-  const [reason, setReason] = useState<string>(initialRule?.reason || '');
+  const [windowUnit, setWindowUnit] = useState<string>(initialRule?.windowUnit || 'MINUTE');
+  const [price, setPrice] = useState<number>(initialRule?.price || 0);
+  const [active, setActive] = useState<boolean>(initialRule?.active ?? true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeUser = users.find((u) => u.clientId.toLowerCase() === selectedClientId.toLowerCase());
+  // Load users from backend
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const data: Page<UserPlanResponse> = await UserPlanService.getAllUsers(0, 1000);
+        // Filter to only show Enterprise users (they can have custom rules)
+        const enterpriseUsers = data.content.filter(u => u.planName === 'ENTERPRISE');
+        setUsers(enterpriseUsers);
+        
+        if (enterpriseUsers.length > 0 && !selectedClientId && !targetClientId) {
+          setSelectedClientId(enterpriseUsers[0].clientId);
+        }
+      } catch (error) {
+        const apiError = error as ApiError;
+        handleApiError(apiError, 'Failed to load users');
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+    loadUsers();
+  }, [selectedClientId, targetClientId]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleApiError = (error: ApiError, defaultMessage: string) => {
+    let message = defaultMessage;
+    if (error.status === 400) {
+      message = 'Invalid request. Please check your input.';
+    } else if (error.status === 404) {
+      message = 'Resource not found.';
+    } else if (error.status === 409) {
+      message = 'Resource already exists.';
+    } else if (error.status === 429) {
+      message = 'Too many requests. Please try again later.';
+    } else if (error.status === 500) {
+      message = 'Server error. Please try again later.';
+    } else if (error.status === 503) {
+      message = 'Service unavailable. Please try again later.';
+    } else if (error.message) {
+      message = error.message;
+    }
+    toast('Error', message, 'error');
+  };
+
+  const activeUser = users.find((u) => u.clientId === selectedClientId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClientId || maxRequests <= 0 || windowValue <= 0) {
       toast('Validation Error', 'Please specify valid custom rule parameters.', 'error');
       return;
     }
 
+    // Only Enterprise users can have custom rules
+    if (activeUser && activeUser.planName !== 'ENTERPRISE') {
+      toast('Validation Error', 'Custom rules are only available for Enterprise clients.', 'error');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const clientName = activeUser ? activeUser.clientName : selectedClientId;
-
-      RateLimiterStore.upsertCustomRule({
-        clientId: selectedClientId,
-        clientName,
+      const userPlan = await UserPlanService.getUserByClientId(selectedClientId);
+      
+      const request: UserCustomRuleRequest = {
+        userPlanId: userPlan.id,
         maxRequests: Number(maxRequests),
         windowValue: Number(windowValue),
         windowUnit,
-        enabled,
-        reason,
-      });
+        price: Number(price),
+        active,
+      };
 
-      toast('Custom Rule Saved', `Updated rate limit override rule for '${clientName}'. Evicted Redis cache rate_rule:${selectedClientId}.`, 'success');
+      if (isEdit && initialRule) {
+        await CustomRuleService.updateCustomRule(selectedClientId, request);
+        toast('Custom Rule Updated', `Updated rate limit override rule for '${activeUser?.clientName}'. Redis cache invalidated.`, 'success');
+      } else {
+        await CustomRuleService.createCustomRule(request);
+        toast('Custom Rule Created', `Created rate limit override rule for '${activeUser?.clientName}'. Redis cache invalidated.`, 'success');
+      }
+      
       router.push('/custom-rules');
-    } catch (err: any) {
-      toast('Failed to Save Rule', err.message || 'Error occurred', 'error');
+    } catch (error) {
+      const apiError = error as ApiError;
+      handleApiError(apiError, 'Failed to save custom rule');
       setIsSubmitting(false);
     }
   };
+
+  if (loadingUsers) {
+    return <div className="p-8 text-center text-slate-500 text-sm">Loading Enterprise users...</div>;
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
@@ -79,7 +141,9 @@ export function CustomRuleForm({ initialRule, targetClientId, isEdit = false }: 
             onChange={(e) => setSelectedClientId(e.target.value)}
             disabled={isEdit}
             className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-semibold text-slate-900 disabled:opacity-60"
+            required
           >
+            <option value="">Select a client...</option>
             {users.map((u) => (
               <option key={u.clientId} value={u.clientId}>
                 {u.clientId} - {u.clientName} (Assigned Plan: {u.planName})
@@ -88,7 +152,7 @@ export function CustomRuleForm({ initialRule, targetClientId, isEdit = false }: 
           </select>
           {activeUser && (
             <p className="text-xs text-slate-500 mt-1">
-              Default Plan Limit: <span className="font-semibold text-slate-800">{activeUser.planName}</span>
+              Assigned Plan: <span className="font-semibold text-slate-800">{activeUser.planName}</span>
             </p>
           )}
         </div>
@@ -134,8 +198,9 @@ export function CustomRuleForm({ initialRule, targetClientId, isEdit = false }: 
             </label>
             <select
               value={windowUnit}
-              onChange={(e) => setWindowUnit(e.target.value as WindowUnit)}
+              onChange={(e) => setWindowUnit(e.target.value)}
               className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              required
             >
               <option value="SECOND">SECOND</option>
               <option value="MINUTE">MINUTE</option>
@@ -144,34 +209,33 @@ export function CustomRuleForm({ initialRule, targetClientId, isEdit = false }: 
             </select>
           </div>
 
-          <div className="md:col-span-3">
+          <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Override Justification / SLA Rationale
+              Price
             </label>
             <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Enterprise VIP contract extension Q1"
-              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+              type="number"
+              min="0"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(Number(e.target.value))}
+              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-amber-500"
             />
           </div>
-        </div>
 
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-900 block">Enable Override Rule</span>
-            <span className="text-[11px] text-slate-500">
-              When checked, sets customRuleEnabled = true for this user
-            </span>
+          <div className="md:col-span-2 flex items-center gap-3 pt-4">
+            <input
+              type="checkbox"
+              id="active"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
+            />
+            <label htmlFor="active" className="text-xs font-semibold text-slate-700">
+              Active
+            </label>
+            <p className="text-[10px] text-slate-400">When enabled, this custom rule will be used for rate limiting</p>
           </div>
-
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="w-5 h-5 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
-          />
         </div>
       </div>
 

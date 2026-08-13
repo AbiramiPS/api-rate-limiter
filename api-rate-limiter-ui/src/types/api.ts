@@ -14,6 +14,11 @@ export interface UserPlanResponse {
   customRuleEnabled: boolean;
 }
 
+export interface RatePlanRequest {
+  planName: string;
+  active: boolean;
+}
+
 export interface RatePlanResponse {
   id: number;
   planName: string;
@@ -29,6 +34,28 @@ export interface Page<T> {
   first: boolean;
   last: boolean;
   empty: boolean;
+}
+
+export interface UserCustomRuleRequest {
+  userPlanId: number;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
+  price: number;
+  active: boolean;
+}
+
+export interface UserCustomRuleResponse {
+  id: number;
+  clientId: string;
+  clientName: string;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
+  price: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiError {
