@@ -15,4 +15,7 @@ public class RatePlanResponse {
     private Long id;
     private String planName;
     private Boolean active;
+    private Integer maxRequests;
+    private Integer windowValue;
+    private String windowUnit;
 }

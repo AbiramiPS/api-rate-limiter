@@ -3,17 +3,33 @@ package com.api_rate_limiter.service;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
 
+import com.api_rate_limiter.dto.response.RedisRuleCacheResponse;
+
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 @Service
 public class RedisService {
     @Autowired
     public RedisTemplate<String,Integer> redisTemplate;
+    // Used for cached rules
+    @Autowired
+    private RedisTemplate<String, RedisRuleCacheResponse> redisRuleCacheTemplate;
 
-    public void saveValue(String key, Integer value) {
-        redisTemplate.opsForValue().set(key, value);
-    }
+    @Autowired
+    private RedisConnectionFactory connectionFactory;
+
+@GetMapping("/redis-info")
+public String redisInfo() {
+
+    return "Redis Factory = "
+            + connectionFactory.getClass().getName();
+}
     
     public Integer getValue(String key) {
         return redisTemplate.opsForValue().get(key);
@@ -22,6 +38,7 @@ public class RedisService {
     // Step 8
     public Long increment(String key) {
         return redisTemplate.opsForValue().increment(key);
+        
     }
 
     // Step 9
@@ -59,12 +76,12 @@ public class RedisService {
     /**
      * Remaining TTL.
      */
-    public long getRemainingTime(String clientId) {
+    // public long getRemainingTime(String clientId) {
 
-        String key = "rate_limit:" + clientId;
+    //     String key = "rate_limit:" + clientId;
 
-        return redisTemplate.getExpire(key);
-    }
+    //     return redisTemplate.getExpire(key);
+    // }
 
     /**
      * Reset counter manually.
@@ -75,4 +92,58 @@ public class RedisService {
 
     }
 
+    public void saveValue(String key, Integer value) {
+
+        redisTemplate.opsForValue().set(key, value);
+
+        System.out.println("Saved Key : " + key);
+        System.out.println("Saved Value : " + value);
+        System.out.println("Keys in Redis : " + redisTemplate.keys("*"));
+    }
+
+    public long getRemainingTime(String clientId) {
+        String key = "rate_limit:" + clientId;
+
+        Long ttl = redisTemplate.getExpire(key);
+
+        return ttl == null ? -1 : ttl;
+    }
+        // =========================================================
+    // RATE RULE CACHE
+    // =========================================================
+
+    public void saveCachedRule(
+            String clientId,
+            RedisRuleCacheResponse rule) {
+
+        String key = "rate_rule:" + clientId;
+
+        redisRuleCacheTemplate
+                .opsForValue()
+                .set(
+                        key,
+                        rule,
+                        Duration.ofMinutes(10)
+                );
+    }
+
+
+    public RedisRuleCacheResponse getCachedRule(
+            String clientId) {
+
+        String key = "rate_rule:" + clientId;
+
+        return redisRuleCacheTemplate
+                .opsForValue()
+                .get(key);
+    }
+
+
+    public void deleteCachedRule(
+            String clientId) {
+
+        String key = "rate_rule:" + clientId;
+
+        redisRuleCacheTemplate.delete(key);
+    }
 }

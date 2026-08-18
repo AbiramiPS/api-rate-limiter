@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import com.api_rate_limiter.dto.request.UserPlanRequest;
 import com.api_rate_limiter.dto.response.UserPlanResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @RequestMapping("/admin/user-plans")
@@ -27,6 +28,10 @@ public class UserPlanController {
     @Autowired
     private UserPlanService userPlanService;
 
+@Operation(
+    summary = "Get user plan",
+    description = "Retrieves the rate plan and custom rule configuration for a client."
+)
     @GetMapping("/{clientId}")
     public ResponseEntity<UserPlanResponse> getUserPlan(@PathVariable String clientId) {
         return ResponseEntity.ok(userPlanService.getUserPlan(clientId));

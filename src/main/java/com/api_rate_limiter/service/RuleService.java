@@ -57,4 +57,12 @@ public class RuleService {
                                 .map(mapper::toResponse);
 
         }
+        
+        public RatePlanRule getRuleEntity(RatePlan plan) {
+                RatePlanRule rule = repo.findByPlan(plan);
+                if (rule == null) {
+                        throw new ResourceNotFoundException("Rate Plan Rule not found");
+                }
+                return rule;
+        }
 }

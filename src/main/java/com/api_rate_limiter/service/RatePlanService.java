@@ -11,6 +11,8 @@ import com.api_rate_limiter.dto.response.RatePlanResponse;
 import com.api_rate_limiter.entity.RatePlan;
 import com.api_rate_limiter.mapper.RatePlanMapper;
 import com.api_rate_limiter.repository.RatePlanRepository;
+import com.api_rate_limiter.repository.RatePlanRuleRepository;
+import com.api_rate_limiter.entity.RatePlanRule;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +21,9 @@ public class RatePlanService {
 
         @Autowired
         private RatePlanRepository repository;
+
+        @Autowired
+        private RatePlanRuleRepository ruleRepository;
 
         @Autowired
         private RatePlanMapper mapper;
@@ -31,7 +36,15 @@ public class RatePlanService {
 
         public RatePlanResponse getPlan(String planName) {
                 RatePlan plan = repository.findByPlanName(planName).orElseThrow(() -> new RuntimeException("Plan not found"));
-                return mapper.toResponse(plan);
+                RatePlanResponse response = mapper.toResponse(plan);
+                // Populate rule information if exists
+                RatePlanRule rule = ruleRepository.findByPlan(plan);
+                if (rule != null) {
+                    response.setMaxRequests(rule.getMaxRequests());
+                    response.setWindowValue(rule.getWindowValue());
+                    response.setWindowUnit(rule.getWindowUnit());
+                }
+                return response;
         }
 
         public Page<RatePlanResponse> getAll(Pageable pageable) {

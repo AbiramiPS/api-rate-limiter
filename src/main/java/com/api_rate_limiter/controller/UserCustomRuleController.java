@@ -62,4 +62,22 @@ public class UserCustomRuleController {
 
         return ResponseEntity.ok(customService.searchUsers(user, pageable));
     }
+
+    @DeleteMapping("/{clientId}")
+    public ResponseEntity<String> deleteRule(@PathVariable String clientId) {
+
+        customService.deleteRule(clientId);
+
+        return ResponseEntity.ok("Custom rule deleted successfully.");
+    }
+    
+    @PutMapping("/{clientId}")
+    public ResponseEntity<UserCustomRuleResponse> updateRule(
+            @PathVariable String clientId,
+            @Valid @RequestBody UserCustomRuleRequest request) {
+
+        UserCustomRuleResponse response = customService.updateRule(clientId, request);
+
+        return ResponseEntity.ok(response);
+    }
 }
