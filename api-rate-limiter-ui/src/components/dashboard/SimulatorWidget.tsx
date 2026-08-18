@@ -1,17 +1,75 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Play, RotateCcw, Zap, ShieldCheck, AlertOctagon, CheckCircle2 } from 'lucide-react';
-import { RateLimiterStore } from '@/lib/services/store';
+import { Play, RotateCcw, Zap, AlertOctagon, CheckCircle2 } from 'lucide-react';
 import { StatusBadge } from '../ui/StatusBadge';
 import { useToast } from '../providers/ToastProvider';
+import { UserPlanResponse, RatePlanResponse, UserCustomRuleResponse } from '@/types/api';
+import { executeRedisTest, resetRateLimitCounter } from '@/services/api';
+import { UserPlanService } from '@/services/userPlanService';
+import { RatePlanService } from '@/services/ratePlanService';
+import { CustomRuleService } from '@/services/customRuleService';
 
-export function SimulatorWidget() {
+interface SimulatorWidgetProps {
+  users?: UserPlanResponse[];
+  plans?: RatePlanResponse[];
+  customRules?: UserCustomRuleResponse[];
+  onRefresh?: () => void;
+  onResetCounter?: (clientId: string) => Promise<void>;
+  redisConnected?: boolean;
+}
+
+export function SimulatorWidget({
+  users: propUsers,
+  plans: propPlans,
+  customRules: propCustomRules,
+  onRefresh,
+  onResetCounter,
+  redisConnected = true,
+}: SimulatorWidgetProps) {
   const { toast } = useToast();
-  const users = RateLimiterStore.getUsers();
 
-  const [selectedClientId, setSelectedClientId] = useState<string>('C-001');
+  const [localUsers, setLocalUsers] = useState<UserPlanResponse[]>([]);
+  const [localPlans, setLocalPlans] = useState<RatePlanResponse[]>([]);
+  const [localCustomRules, setLocalCustomRules] = useState<UserCustomRuleResponse[]>([]);
+  const [loadingLocal, setLoadingLocal] = useState(false);
+
+  const users = propUsers || localUsers;
+  const plans = propPlans || localPlans;
+  const customRules = propCustomRules || localCustomRules;
+
+  // Load data internally if not provided by props
+  React.useEffect(() => {
+    if (!propUsers || !propPlans || !propCustomRules) {
+      const loadLocalData = async () => {
+        setLoadingLocal(true);
+        try {
+          const [uRes, pRes, crRes] = await Promise.all([
+            UserPlanService.getAllUsers(0, 1000),
+            RatePlanService.getAllPlans(0, 100),
+            CustomRuleService.searchCustomRules('', 0, 100),
+          ]);
+          setLocalUsers(uRes.content);
+          setLocalPlans(pRes.content);
+          setLocalCustomRules(crRes.content);
+        } catch (err) {
+          console.error('Failed to load local simulator data', err);
+        } finally {
+          setLoadingLocal(false);
+        }
+      };
+      loadLocalData();
+    }
+  }, [propUsers, propPlans, propCustomRules]);
+
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [burstCount, setBurstCount] = useState<number>(1);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [logs, setLogs] = useState<{
+    id: number;
+    status: number;
+    allowed: boolean;
+  }[]>([]);
   const [lastResult, setLastResult] = useState<{
     allowed: boolean;
     status: number;
@@ -24,29 +82,125 @@ export function SimulatorWidget() {
     ttlSeconds: number;
   } | null>(null);
 
-  const activeUser = users.find((u) => u.clientId === selectedClientId) || users[0];
-  const resolvedRule = RateLimiterStore.resolveRuleForClient(selectedClientId);
-
-  const handleSimulate = () => {
-    let result = null;
-    for (let i = 0; i < burstCount; i++) {
-      result = RateLimiterStore.simulateApiRequest(selectedClientId);
+  React.useEffect(() => {
+    if (users.length > 0 && !selectedClientId) {
+      setSelectedClientId(users[0].clientId);
     }
-    if (result) {
-      setLastResult(result);
-      if (result.allowed) {
-        toast('Request Allowed', result.message, 'success');
-      } else {
-        toast('Request Throttled', result.message, 'error');
+  }, [users, selectedClientId]);
+
+  const activeUser = users.find((u) => u.clientId === selectedClientId) || users[0];
+
+  const resolvedRule = React.useMemo(() => {
+    if (!selectedClientId || !activeUser) {
+      return {
+        maxRequests: 0,
+        windowValue: 1,
+        windowUnit: 'MINUTE',
+        source: 'RATE_PLAN',
+        sourceName: 'No Client Selected',
+      };
+    }
+
+    const isEnterprise = activeUser.planName?.toUpperCase() === 'ENTERPRISE';
+    if (isEnterprise && activeUser.customRuleEnabled) {
+      const customRule = customRules.find(
+        (r) => r.clientId.toUpperCase() === selectedClientId.toUpperCase()
+      );
+      if (customRule) {
+        return {
+          maxRequests: customRule.maxRequests,
+          windowValue: customRule.windowValue,
+          windowUnit: customRule.windowUnit,
+          source: 'CUSTOM_RULE',
+          sourceName: 'Custom Rule',
+        };
       }
     }
+
+    const plan = plans.find(
+      (p) => p.planName?.toUpperCase() === activeUser.planName?.toUpperCase()
+    );
+    return {
+      maxRequests: plan?.maxRequests || 0,
+      windowValue: plan?.windowValue || 1,
+      windowUnit: plan?.windowUnit || 'MINUTE',
+      source: 'RATE_PLAN',
+      sourceName: `Plan: ${activeUser.planName}`,
+    };
+  }, [selectedClientId, activeUser, plans, customRules]);
+
+  const handleSimulate = async () => {
+    if (!selectedClientId) return;
+    setIsSimulating(true);
+    setLogs([]);
+    setLastResult(null);
+
+    let latestResult = null;
+    const tempLogs = [];
+
+    for (let i = 0; i < burstCount; i++) {
+      try {
+        const res = await executeRedisTest(selectedClientId);
+        latestResult = res;
+        tempLogs.push({
+          id: i + 1,
+          status: res.status,
+          allowed: res.allowed,
+        });
+        setLogs([...tempLogs]);
+        setLastResult({
+          ...res,
+          windowValue: resolvedRule.windowValue,
+          windowUnit: resolvedRule.windowUnit,
+          source: resolvedRule.sourceName,
+        });
+      } catch (error: any) {
+        tempLogs.push({
+          id: i + 1,
+          status: error.status || 500,
+          allowed: false,
+        });
+        setLogs([...tempLogs]);
+        toast('Simulation Error', error.message || 'Request failed', 'error');
+      }
+    }
+
+    if (latestResult) {
+      if (latestResult.allowed) {
+        toast('Request Allowed', latestResult.message, 'success');
+      } else {
+        toast('Request Throttled', latestResult.message, 'error');
+      }
+    }
+
+    setIsSimulating(false);
+    if (onRefresh) onRefresh();
   };
 
-  const handleResetCounter = () => {
-    RateLimiterStore.flushRedisKey(`rate_limit:${selectedClientId}`);
-    setLastResult(null);
-    toast('Counter Reset', `Flushed counter rate_limit:${selectedClientId} from Redis`, 'info');
+  const handleResetCounter = async () => {
+    if (!selectedClientId) return;
+    try {
+      if (onResetCounter) {
+        await onResetCounter(selectedClientId);
+      } else {
+        await resetRateLimitCounter(selectedClientId);
+      }
+      setLastResult(null);
+      setLogs([]);
+      toast('Counter Reset', `Flushed counter rate_limit:${selectedClientId} from Redis`, 'info');
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      toast('Error', e.message || 'Failed to reset counter', 'error');
+    }
   };
+
+  if (loadingLocal && users.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        <p className="text-xs text-slate-500 text-center">Loading simulator...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
@@ -63,7 +217,8 @@ export function SimulatorWidget() {
           </div>
           <button
             onClick={handleResetCounter}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium"
+            disabled={isSimulating || !redisConnected}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             title="Reset counter for selected client"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -82,15 +237,21 @@ export function SimulatorWidget() {
               onChange={(e) => {
                 setSelectedClientId(e.target.value);
                 setLastResult(null);
+                setLogs([]);
               }}
-              className="w-full px-3 py-2 text-xs md:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+              disabled={isSimulating || !redisConnected}
+              className="w-full px-3 py-2 text-xs md:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {users.map((u) => (
-                <option key={u.clientId} value={u.clientId}>
-                  {u.clientId} - {u.clientName} ({u.planName}
-                  {u.customRuleEnabled ? ' | Custom Rule Active' : ''})
-                </option>
-              ))}
+              {users.map((u) => {
+                const isEnterprise = u.planName?.toUpperCase() === 'ENTERPRISE';
+                const hasCustomRule = isEnterprise && u.customRuleEnabled;
+                return (
+                  <option key={u.clientId} value={u.clientId}>
+                    {u.clientId} - {u.clientName} ({u.planName}
+                    {hasCustomRule ? ' | Custom Rule Active' : ''})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -105,6 +266,12 @@ export function SimulatorWidget() {
             <StatusBadge type="rule_source" value={resolvedRule.source} />
           </div>
 
+          {!redisConnected && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs font-semibold">
+              Simulator unavailable while Redis is disconnected.
+            </div>
+          )}
+
           {/* Simulation Burst Controls */}
           <div className="flex items-center gap-3">
             <div className="flex-1">
@@ -117,7 +284,8 @@ export function SimulatorWidget() {
                     key={cnt}
                     type="button"
                     onClick={() => setBurstCount(cnt)}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                    disabled={isSimulating || !redisConnected}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                       burstCount === cnt
                         ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                         : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -131,12 +299,37 @@ export function SimulatorWidget() {
 
             <button
               onClick={handleSimulate}
-              className="mt-5 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 text-white rounded-xl font-semibold text-xs md:text-sm shadow-md shadow-indigo-200 flex items-center gap-2 shrink-0 transition-transform active:scale-95"
+              disabled={isSimulating || !selectedClientId || !redisConnected}
+              className="mt-5 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 text-white rounded-xl font-semibold text-xs md:text-sm shadow-md shadow-indigo-200 flex items-center gap-2 shrink-0 transition-transform active:scale-95 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
             >
               <Play className="w-4 h-4 fill-white" />
-              Simulate Request
+              {isSimulating ? 'Sending...' : 'Simulate Request'}
             </button>
           </div>
+
+          {/* Logs List */}
+          {logs.length > 0 && (
+            <div className="space-y-1.5 max-h-40 overflow-y-auto bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono text-[11px]">
+              <div className="font-bold text-slate-500 uppercase tracking-wider mb-1 text-[10px] pb-1 border-b border-slate-200">
+                Simulation Request Log
+              </div>
+              {logs.map((log) => (
+                <div key={log.id} className="flex items-center justify-between">
+                  <span className="text-slate-500 font-semibold">#{log.id}</span>
+                  <span className="font-bold">HTTP {log.status}</span>
+                  <span
+                    className={`font-bold uppercase px-1.5 py-0.5 rounded text-[9px] ${
+                      log.allowed
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    {log.allowed ? 'Allowed' : 'Blocked'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Simulation Result Output */}
           {lastResult && (

@@ -300,7 +300,7 @@ export function UserTable({ initialUsers }: UserTableProps) {
           <div className="p-8 text-center text-slate-500 text-sm">Loading clients...</div>
         ) : error ? (
           <div className="p-6">
-            <ErrorState title="Unable to load clients" description={error} />
+            <ErrorState title="Unable to load clients" message={error} />
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="p-6">

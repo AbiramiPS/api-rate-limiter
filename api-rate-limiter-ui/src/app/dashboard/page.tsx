@@ -11,7 +11,8 @@ import { UserPlanService } from '@/services/userPlanService';
 import { RatePlanService } from '@/services/ratePlanService';
 import { CustomRuleService } from '@/services/customRuleService';
 import { RateLimiterStore } from '@/lib/services/store';
-import { SystemStats, ActivityLog, Page } from '@/types/api';
+import { Page } from '@/types/api';
+import { SystemStats, ActivityLog } from '@/types';
 import { formatNumber, formatTimeAgo } from '@/lib/utils';
 import {
   Users,

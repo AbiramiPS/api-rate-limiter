@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserCustomRuleResponse, Page } from '@/types/api';
+import { UserCustomRuleResponse, Page, UserPlanResponse } from '@/types/api';
 import { DataTable, Column } from '../ui/DataTable';
 import { CustomRuleService, ApiError } from '@/services/customRuleService';
 import { UserPlanService } from '@/services/userPlanService';
@@ -118,7 +118,7 @@ export function CustomRuleTable() {
       cell: (rule) => (
         <div>
           <span className="font-mono font-extrabold text-slate-900 text-xs block">
-            {formatRuleSpec(rule.maxRequests, rule.windowValue, rule.windowUnit)}
+            {formatRuleSpec(rule.maxRequests, rule.windowValue, rule.windowUnit as any)}
           </span>
           <span className="text-[10px] text-slate-400 font-semibold uppercase">
             Window TTL: {rule.windowValue} {rule.windowUnit}
@@ -149,7 +149,7 @@ export function CustomRuleTable() {
       accessorKey: 'active',
       cell: (rule) => {
         const user = userMap[rule.clientId];
-        const isEnterprise = user?.planName === 'ENTERPRISE';
+        const isEnterprise = user?.planName?.toUpperCase() === 'ENTERPRISE';
         const effectiveActive = isEnterprise && user?.customRuleEnabled && rule.active;
         const enabled = effectiveActive;
         const statusText = enabled ? 'ACTIVE OVERRIDE' : 'DISABLED';
@@ -199,7 +199,7 @@ export function CustomRuleTable() {
         <div className="p-8 text-center text-slate-500 text-sm">Loading custom rules...</div>
       ) : error ? (
         <div className="p-6">
-          <ErrorState title="Unable to load custom rules" description={error} />
+          <ErrorState title="Unable to load custom rules" message={error} />
         </div>
       ) : rules.length === 0 ? (
         <div className="p-6">
