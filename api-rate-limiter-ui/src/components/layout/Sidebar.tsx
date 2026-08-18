@@ -29,7 +29,6 @@ const NAV_ITEMS = [
   { label: 'Rate Plans', href: '/plans', icon: Layers },
   { label: 'Custom Rules', href: '/custom-rules', icon: Zap },
   { label: 'Redis Monitor', href: '/redis', icon: Database, badge: 'Live' },
-  { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar({ isMobileOpen, onCloseMobile }: SidebarProps) {

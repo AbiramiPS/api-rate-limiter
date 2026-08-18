@@ -213,14 +213,6 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
 
               <div className="py-1">
                 <Link
-                  href="/settings"
-                  onClick={() => setShowProfileMenu(false)}
-                  className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                >
-                  <Settings className="w-4 h-4 text-slate-400" />
-                  System Settings
-                </Link>
-                <Link
                   href="/redis"
                   onClick={() => setShowProfileMenu(false)}
                   className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
