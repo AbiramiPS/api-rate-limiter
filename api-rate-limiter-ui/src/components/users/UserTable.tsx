@@ -192,7 +192,7 @@ export function UserTable({ initialUsers }: UserTableProps) {
       header: 'Custom Rule',
       accessorKey: 'customRuleEnabled',
       cell: (user: UserPlanResponse) => {
-        const enabled = user.planName === 'ENTERPRISE' && user.customRuleEnabled;
+        const enabled = user.planName?.toUpperCase() === 'ENTERPRISE' && user.customRuleEnabled;
         return <StatusBadge type="custom_rule" value={enabled} />;
       },
     },
