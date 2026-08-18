@@ -1,15 +1,47 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { RatePlanResponse } from '@/types/api';
-import { Layers, ArrowLeft } from 'lucide-react';
+import { RatePlanResponse, RatePlanRuleResponse } from '@/types/api';
+import { Layers, ArrowLeft, Loader2 } from 'lucide-react';
+import { RuleService } from '@/services/ruleService';
 
 interface PlanDetailViewProps {
   plan: RatePlanResponse;
 }
 
 export function PlanDetailView({ plan }: PlanDetailViewProps) {
+  const [rule, setRule] = useState<RatePlanRuleResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRule = async () => {
+      try {
+        setIsLoading(true);
+        const fetchedRule = await RuleService.getRule(plan.id);
+        setRule(fetchedRule);
+      } catch (err) {
+        // rule might not exist (404)
+        const apiErr = err as { status?: number };
+        if (apiErr.status !== 404) {
+          console.error('Failed to fetch rule:', err);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchRule();
+  }, [plan.id]);
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+        Loading plan configuration...
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -61,10 +93,27 @@ export function PlanDetailView({ plan }: PlanDetailViewProps) {
         </div>
       </div>
 
-      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
-        <p className="text-xs text-slate-600">
-          <strong>Note:</strong> Rate limit rules (maxRequests, windowValue, windowUnit) for this plan are configured through the Rules management interface. This page shows plan metadata only.
-        </p>
+      {/* Rule Details */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4 mt-4">
+        <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Rate Limit Rule</h3>
+        {rule ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-1">Max Requests</p>
+              <p className="text-sm font-bold text-slate-900">{rule.maxRequests}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-1">Window</p>
+              <p className="text-sm font-bold text-slate-900">{rule.windowValue} {rule.windowUnit}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-1">Effective Limit</p>
+              <p className="text-sm font-bold text-slate-900">{rule.maxRequests} requests per {rule.windowValue} {rule.windowUnit.toLowerCase()}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500 italic">No rate limit rule configured for this plan.</div>
+        )}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { RatePlanService, ApiError } from '@/services/ratePlanService';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../providers/ToastProvider';
 import { Eye, Edit3, Trash2, Layers, CheckCircle2, Users } from 'lucide-react';
+import { PlanForm } from '@/components/plans/PlanForm';
 
 export function PlanTable() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export function PlanTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [planToDelete, setPlanToDelete] = useState<RatePlanResponse | null>(null);
+  const [editingPlan, setEditingPlan] = useState<RatePlanResponse | null>(null);
   const [pagination, setPagination] = useState({
     page: 0,
     size: 100,
@@ -148,6 +150,16 @@ export function PlanTable() {
           >
             <Trash2 className="w-4 h-4" />
           </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingPlan(plan);
+            }}
+            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            title="Edit Plan"
+          >
+            <Edit3 className="w-4 h-4" />
+          </button>
         </div>
       ),
     },
@@ -186,6 +198,30 @@ export function PlanTable() {
         confirmText="Delete Plan"
         variant="danger"
       />
+
+      {editingPlan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl max-w-2xl w-full shadow-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold">Edit Rate Plan: {editingPlan.planName}</h2>
+              <button
+                onClick={() => setEditingPlan(null)}
+                className="text-slate-500 hover:text-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+            <PlanForm
+              initialPlan={editingPlan}
+              isEdit
+              onSuccess={() => {
+                setEditingPlan(null);
+                refreshData();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

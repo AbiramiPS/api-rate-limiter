@@ -23,6 +23,9 @@ export interface RatePlanResponse {
   id: number;
   planName: string;
   active: boolean;
+  maxRequests?: number;
+  windowValue?: number;
+  windowUnit?: string;
 }
 
 export interface Page<T> {
@@ -62,4 +65,19 @@ export interface ApiError {
   message: string;
   status: number;
   details?: string;
+}
+
+export interface RatePlanRuleRequest {
+  planId: number;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
+}
+
+export interface RatePlanRuleResponse {
+  id: number;
+  planId: number;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
 }

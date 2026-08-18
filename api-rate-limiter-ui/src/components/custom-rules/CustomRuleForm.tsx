@@ -25,6 +25,15 @@ export function CustomRuleForm({ initialRule, targetClientId, isEdit = false }: 
   const [selectedClientId, setSelectedClientId] = useState<string>(
     initialRule?.clientId || targetClientId || ''
   );
+
+  // Ensure selected client ID reflects loaded rule or target client
+  useEffect(() => {
+    if (initialRule?.clientId) {
+      setSelectedClientId(initialRule.clientId);
+    } else if (targetClientId) {
+      setSelectedClientId(targetClientId);
+    }
+  }, [initialRule?.clientId, targetClientId]);
   const [maxRequests, setMaxRequests] = useState<number>(initialRule?.maxRequests || 200);
   const [windowValue, setWindowValue] = useState<number>(initialRule?.windowValue || 1);
   const [windowUnit, setWindowUnit] = useState<string>(initialRule?.windowUnit || 'MINUTE');

@@ -98,7 +98,10 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
         // Check if plan is changing
         const planChanged = initialUser.planId !== planId;
         
-        await UserPlanService.updateUser(initialUser.clientId, request);
+        await UserPlanService.patchUser(initialUser.clientId, {
+          planId,
+          customRuleEnabled
+        });
         
         if (planChanged) {
           toast('Client Updated', `Client '${clientName}' configuration saved. Rate plan changed and Redis cache invalidated.`, 'success');

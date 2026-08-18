@@ -10,7 +10,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { ErrorState } from '../ui/ErrorState';
 import { useToast } from '../providers/ToastProvider';
 import { UserPlanService, ApiError } from '@/services/userPlanService';
-import { Eye, Edit3, Trash2, Zap, Shield, Plus, SlidersHorizontal, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, Edit3, Trash2, Shield, Plus, SlidersHorizontal, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Column<T> {
@@ -213,14 +213,6 @@ export function UserTable({ initialUsers }: UserTableProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <Edit3 className="w-4 h-4" />
-          </Link>
-          <Link
-            href={`/custom-rules/${user.clientId}`}
-            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-            title="Configure Custom Rule"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Zap className="w-4 h-4" />
           </Link>
           <button
             onClick={(e) => {

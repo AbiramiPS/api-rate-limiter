@@ -4,23 +4,58 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RatePlanRequest, RatePlanResponse } from '@/types/api';
 import { RatePlanService, ApiError } from '@/services/ratePlanService';
+import { RuleService, ApiError as RuleApiError } from '@/services/ruleService';
 import { useToast } from '../providers/ToastProvider';
-import { ArrowLeft, Save, Layers } from 'lucide-react';
+import { ArrowLeft, Save, Layers, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface PlanFormProps {
   initialPlan?: RatePlanResponse;
   isEdit?: boolean;
+  onSuccess?: () => void;
 }
 
-export function PlanForm({ initialPlan, isEdit = false }: PlanFormProps) {
+export function PlanForm({ initialPlan, isEdit = false, onSuccess }: PlanFormProps) {
   const router = useRouter();
   const { toast } = useToast();
 
   const [planName, setPlanName] = useState(initialPlan?.planName || '');
   const [active, setActive] = useState(initialPlan?.active ?? true);
 
+  // Rule fields
+  const [maxRequests, setMaxRequests] = useState('');
+  const [windowValue, setWindowValue] = useState('');
+  const [windowUnit, setWindowUnit] = useState('SECOND');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(isEdit);
+  const [hasExistingRule, setHasExistingRule] = useState(false);
+
+  React.useEffect(() => {
+    if (isEdit && initialPlan?.id) {
+      const fetchRule = async () => {
+        try {
+          setIsLoading(true);
+          const rule = await RuleService.getRule(initialPlan.id);
+          if (rule) {
+            setMaxRequests(rule.maxRequests.toString());
+            setWindowValue(rule.windowValue.toString());
+            setWindowUnit(rule.windowUnit);
+            setHasExistingRule(true);
+          }
+        } catch (error) {
+          // If rule doesn't exist, it might throw a 404
+          const apiErr = error as RuleApiError;
+          if (apiErr.status !== 404) {
+            handleApiError(apiErr, 'Failed to fetch rule');
+          }
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchRule();
+    }
+  }, [isEdit, initialPlan]);
 
   const handleApiError = (error: ApiError, defaultMessage: string) => {
     let message = defaultMessage;
@@ -48,30 +83,75 @@ export function PlanForm({ initialPlan, isEdit = false }: PlanFormProps) {
       toast('Validation Error', 'Plan name is required.', 'error');
       return;
     }
-
+    if (!maxRequests.trim() || !windowValue.trim() || !windowUnit) {
+      toast('Validation Error', 'All rule fields are required.', 'error');
+      return;
+    }
     setIsSubmitting(true);
-
+    const request: RatePlanRequest = {
+      planName: planName.trim(),
+      active,
+    };
     try {
-      const request: RatePlanRequest = {
-        planName: planName.trim(),
-        active,
-      };
-
       if (isEdit && initialPlan) {
+        // Update plan
         await RatePlanService.updatePlan(initialPlan.planName, request);
+        if (hasExistingRule) {
+          // Update rule (if backend has updateRule, but user said "Update the existing RatePlanRule using the existing RatePlanRule API", let's check ruleService. Wait, ruleService doesn't have updateRule, it has createRule. We might need to implement updateRule in ruleService if it exists in backend).
+          // Actually, ruleService.ts only has createRule. I'll add updateRule or just post/put it. Let's see what RuleService has.
+          // Wait, I will just call createRule? No, "Do not create a duplicate rule if one already exists. Update the existing RatePlanRule".
+          // Let me assume ruleService needs updateRule.
+        }
+        // Wait, ruleService in the user's codebase only had createRule. Let me use PUT on BASE_PATH.
+        const ruleRequest = {
+          planId: initialPlan.id,
+          maxRequests: Number(maxRequests),
+          windowValue: Number(windowValue),
+          windowUnit,
+        };
+        if (hasExistingRule) {
+          await RuleService.updateRule(initialPlan.id, ruleRequest);
+        } else {
+          await RuleService.createRule(ruleRequest);
+        }
         toast('Plan Updated', `Rate plan '${planName}' has been updated.`, 'success');
-        router.push(`/plans/${planName}`);
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          router.push(`/plans/${planName}`);
+        }
       } else {
+        // Create plan first
         const newPlan = await RatePlanService.createPlan(request);
+        // Create rule linked to new plan
+        await RuleService.createRule({
+          planId: newPlan.id,
+          maxRequests: Number(maxRequests),
+          windowValue: Number(windowValue),
+          windowUnit,
+        });
         toast('Plan Created', `Successfully created rate plan '${planName}'.`, 'success');
-        router.push(`/plans/${newPlan.planName}`);
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          router.push(`/plans/${newPlan.planName}`);
+        }
       }
     } catch (error) {
-      const apiError = error as ApiError;
-      handleApiError(apiError, 'Failed to save plan');
+      const apiErr = error as RuleApiError;
+      handleApiError(apiErr, 'Failed to save plan/rule');
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+        Loading plan configuration...
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
@@ -114,10 +194,54 @@ export function PlanForm({ initialPlan, isEdit = false }: PlanFormProps) {
         </div>
       </div>
 
-      <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200/80">
-        <p className="text-xs text-amber-800">
-          <strong>Note:</strong> Rate limit rules (maxRequests, windowValue, windowUnit) are configured separately through the Rules management interface.
-        </p>
+      {/* Rule Details Section */}
+      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200/80">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+          <h3 className="text-base font-bold text-slate-900">Rate Limit Rule</h3>
+          {isEdit && !hasExistingRule && !isLoading && (
+            <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full border border-rose-200">
+              No rule configured
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Max Requests Allowed *</label>
+            <input
+              type="number"
+              min={1}
+              value={maxRequests}
+              onChange={(e) => setMaxRequests(e.target.value)}
+              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Window Value *</label>
+            <input
+              type="number"
+              min={1}
+              value={windowValue}
+              onChange={(e) => setWindowValue(e.target.value)}
+              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Window Time Unit *</label>
+            <select
+              value={windowUnit}
+              onChange={(e) => setWindowUnit(e.target.value)}
+              className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="SECOND">SECOND</option>
+              <option value="MINUTE">MINUTE</option>
+              <option value="HOUR">HOUR</option>
+              <option value="DAY">DAY</option>
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-2">Defines how many API requests are allowed within the selected time window.</p>
       </div>
 
       <div className="flex items-center justify-between pt-2">
