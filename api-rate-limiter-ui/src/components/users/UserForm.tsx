@@ -71,6 +71,14 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
   const selectedPlan = plans.find((p) => p.id === planId);
   const isEnterprisePlan = selectedPlan?.planName?.toUpperCase() === 'ENTERPRISE';
 
+  // Auto-disable custom rule if selected plan is not Enterprise
+  useEffect(() => {
+    if (!isEnterprisePlan && customRuleEnabled) {
+      setCustomRuleEnabled(false);
+      toast('Info', 'Custom rules are only available for Enterprise clients. Disabled for selected plan.', 'info');
+    }
+  }, [isEnterprisePlan]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim() || !clientId.trim()) {
@@ -87,11 +95,13 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
     setIsSubmitting(true);
 
     try {
+      // Ensure custom rule is only sent if Enterprise plan
+      const effectiveCustomRuleEnabled = customRuleEnabled && isEnterprisePlan;
       const request: UserPlanRequest = {
         clientId: clientId.trim(),
         clientName: clientName.trim(),
         planId,
-        customRuleEnabled,
+        customRuleEnabled: effectiveCustomRuleEnabled,
       };
 
       if (isEdit && initialUser) {
@@ -100,7 +110,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
         
         await UserPlanService.patchUser(initialUser.clientId, {
           planId,
-          customRuleEnabled
+          customRuleEnabled: effectiveCustomRuleEnabled
         });
         
         if (planChanged) {

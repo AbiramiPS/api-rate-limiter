@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import { UserCustomRuleResponse, Page } from '@/types/api';
 import { DataTable, Column } from '../ui/DataTable';
 import { CustomRuleService, ApiError } from '@/services/customRuleService';
+import { UserPlanService } from '@/services/userPlanService';
+import { Zap, Server } from 'lucide-react';
 import { formatRuleSpec, formatTimeAgo } from '@/lib/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../providers/ToastProvider';
-import { Eye, Edit3, Trash2, Zap, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Eye, Edit3, Trash2, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { EmptyState } from '../ui/EmptyState';
 import { ErrorState } from '../ui/ErrorState';
 
@@ -21,18 +23,26 @@ export function CustomRuleTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ruleToDelete, setRuleToDelete] = useState<UserCustomRuleResponse | null>(null);
+  const [userMap, setUserMap] = useState<Record<string, UserPlanResponse>>({});
 
   const fetchRules = useCallback(async () => {
     try {
       setError(null);
       setLoading(true);
-      // Search all users to get custom rules
+      // Fetch custom rules
       const data: Page<UserCustomRuleResponse> = await CustomRuleService.searchCustomRules('', 0, 100);
       setRules(data.content);
+      // Fetch all users to map plans
+      const usersData: Page<UserPlanResponse> = await UserPlanService.getAllUsers(0, 1000);
+      const map: Record<string, UserPlanResponse> = {};
+      usersData.content.forEach((u) => {
+        map[u.clientId] = u;
+      });
+      setUserMap(map);
     } catch (error) {
       const apiError = error as ApiError;
-      setError(apiError.message || 'Failed to load custom rules');
-      handleApiError(apiError, 'Failed to load custom rules');
+      setError(apiError.message || 'Failed to load data');
+      handleApiError(apiError, 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -137,22 +147,23 @@ export function CustomRuleTable() {
     {
       header: 'Rule Status',
       accessorKey: 'active',
-      cell: (rule) => (
-        <span
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-            rule.active
-              ? 'bg-amber-50 text-amber-800 border-amber-200'
-              : 'bg-slate-50 text-slate-500 border-slate-200'
-          }`}
-        >
+      cell: (rule) => {
+        const user = userMap[rule.clientId];
+        const isEnterprise = user?.planName === 'ENTERPRISE';
+        const effectiveActive = isEnterprise && user?.customRuleEnabled && rule.active;
+        const enabled = effectiveActive;
+        const statusText = enabled ? 'ACTIVE OVERRIDE' : 'DISABLED';
+        return (
           <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              rule.active ? 'bg-amber-500' : 'bg-slate-400'
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+              enabled ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'
             }`}
-          />
-          {rule.active ? 'ACTIVE OVERRIDE' : 'INACTIVE'}
-        </span>
-      ),
+          >
+            {enabled ? <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" /> : <Server className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+            {statusText}
+          </span>
+        );
+      },
     },
     {
       header: 'Actions',
