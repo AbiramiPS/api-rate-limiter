@@ -311,7 +311,7 @@ public class UserCustomRuleService {
 
         if (rule == null) {
             throw new ResourceNotFoundException(
-                    "Custom rule not found");
+                    "Custom rate-limit configuration is missing for this client.");
         }
 
         return rule;

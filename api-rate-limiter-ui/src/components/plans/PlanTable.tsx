@@ -171,7 +171,7 @@ export function PlanTable() {
         <div className="p-8 text-center text-slate-500 text-sm">Loading rate plans...</div>
       ) : error ? (
         <div className="p-6">
-          <ErrorState title="Unable to load rate plans" description={error} />
+          <ErrorState title="Unable to load rate plans" message={error} />
         </div>
       ) : plans.length === 0 ? (
         <div className="p-6">

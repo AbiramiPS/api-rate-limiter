@@ -1,6 +1,10 @@
 package com.api_rate_limiter.service;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -10,8 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import com.api_rate_limiter.dto.response.RedisRuleCacheResponse;
+import com.api_rate_limiter.dto.response.RedisRateLimitEventDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.springframework.data.redis.connection.RedisConnection;
+
+import com.api_rate_limiter.dto.response.RedisHealthDto;
+import com.api_rate_limiter.dto.response.RedisKeyInfoDto;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 @Service
 public class RedisService {
@@ -20,6 +28,12 @@ public class RedisService {
     // Used for cached rules
     @Autowired
     private RedisTemplate<String, RedisRuleCacheResponse> redisRuleCacheTemplate;
+
+    @Autowired
+    private RedisTemplate<String, String> redisEventTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private RedisConnectionFactory connectionFactory;
@@ -145,5 +159,126 @@ public String redisInfo() {
         String key = "rate_rule:" + clientId;
 
         redisRuleCacheTemplate.delete(key);
+    }
+
+    /**
+     * Retrieve health information about the Redis server.
+     */
+    public RedisHealthDto getHealthInfo() {
+        RedisHealthDto health = new RedisHealthDto();
+        try {
+            RedisConnection connection = connectionFactory.getConnection();
+            health.setConnected(true);
+            java.util.Properties info = connection.info();
+            health.setRedisVersion(info.getProperty("redis_version", ""));
+            String usedMemoryStr = info.getProperty("used_memory");
+            if (usedMemoryStr != null) {
+                try { health.setMemoryUsed(Long.parseLong(usedMemoryStr)); } catch (NumberFormatException e) { health.setMemoryUsed(0L); }
+            }
+            Long dbSize = connection.dbSize();
+            health.setTotalKeys(dbSize != null ? dbSize.intValue() : 0);
+        } catch (Exception e) {
+            health.setConnected(false);
+            health.setRedisVersion("unknown");
+            health.setMemoryUsed(0L);
+            health.setTotalKeys(0);
+        }
+        return health;
+    }
+
+    /**
+     * List all rate‑limit counter keys with values and TTLs.
+     */
+    public java.util.List<RedisKeyInfoDto> listCounters() {
+        java.util.List<RedisKeyInfoDto> result = new java.util.ArrayList<>();
+        Set<String> keys = redisTemplate.keys("rate_limit:*");
+        if (keys != null) {
+            for (String key : keys) {
+                Integer value = redisTemplate.opsForValue().get(key);
+                Long ttl = redisTemplate.getExpire(key);
+                String clientId = key.replaceFirst("rate_limit:", "");
+                RedisKeyInfoDto dto = new RedisKeyInfoDto();
+                dto.setKey(key);
+                dto.setCategory("COUNTER");
+                dto.setValue(value != null ? value.toString() : "null");
+                dto.setTtl(ttl);
+                dto.setClientId(clientId);
+                result.add(dto);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * List all cached rule keys with JSON value and TTLs.
+     */
+    public java.util.List<RedisKeyInfoDto> listRules() {
+        java.util.List<RedisKeyInfoDto> result = new java.util.ArrayList<>();
+        Set<String> keys = redisTemplate.keys("rate_rule:*");
+        if (keys != null) {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            for (String key : keys) {
+                RedisRuleCacheResponse rule = redisRuleCacheTemplate.opsForValue().get(key);
+                Long ttl = redisRuleCacheTemplate.getExpire(key);
+                String clientId = key.replaceFirst("rate_rule:", "");
+                String json = "";
+                try { json = mapper.writeValueAsString(rule); } catch (Exception e) { json = "" + rule; }
+                RedisKeyInfoDto dto = new RedisKeyInfoDto();
+                dto.setKey(key);
+                dto.setCategory("RULE");
+                dto.setValue(json);
+                dto.setTtl(ttl);
+                dto.setClientId(clientId);
+                result.add(dto);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Reset a single client's rate‑limit counter without affecting rule cache.
+     */
+    public void resetRateLimitCounter(String clientId) {
+        if (clientId == null || clientId.isEmpty()) return;
+        redisTemplate.delete("rate_limit:" + clientId);
+    }
+
+    /**
+     * Flush only this application's keys (counters and rule caches).
+     */
+    public void flushAppKeys() {
+        Set<String> counterKeys = redisTemplate.keys("rate_limit:*");
+        if (counterKeys != null && !counterKeys.isEmpty()) {
+            redisTemplate.delete(counterKeys);
+        }
+        Set<String> ruleKeys = redisTemplate.keys("rate_rule:*");
+        if (ruleKeys != null && !ruleKeys.isEmpty()) {
+            redisTemplate.delete(ruleKeys);
+        }
+    }
+
+    public void logEvent(RedisRateLimitEventDto event) {
+        try {
+            String json = objectMapper.writeValueAsString(event);
+            redisEventTemplate.opsForList().leftPush("rate_limit_events", json);
+            redisEventTemplate.opsForList().trim("rate_limit_events", 0, 99);
+        } catch (Exception e) {
+            System.err.println("Failed to serialize or store rate limit event: " + e.getMessage());
+        }
+    }
+
+    public List<RedisRateLimitEventDto> getRecentEvents() {
+        List<RedisRateLimitEventDto> events = new ArrayList<>();
+        try {
+            List<String> rawEvents = redisEventTemplate.opsForList().range("rate_limit_events", 0, 99);
+            if (rawEvents != null) {
+                for (String raw : rawEvents) {
+                    events.add(objectMapper.readValue(raw, RedisRateLimitEventDto.class));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to read or deserialize rate limit events: " + e.getMessage());
+        }
+        return events;
     }
 }

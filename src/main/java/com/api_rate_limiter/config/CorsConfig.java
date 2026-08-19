@@ -20,6 +20,10 @@ public class CorsConfig implements WebMvcConfigurer {
                         "DELETE",
                         "OPTIONS")
                 .allowedHeaders("*")
+                .exposedHeaders(
+                        "X-RateLimit-Limit",
+                        "X-RateLimit-Remaining",
+                        "X-RateLimit-Reset")
                 .allowCredentials(true);
     }
 }

@@ -116,10 +116,14 @@ import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.api_rate_limiter.dto.response.RedisRateLimitResultResponse;
+import com.api_rate_limiter.service.RedisRateLimiterService;
 import com.api_rate_limiter.service.RedisService;
 
 @RestController
@@ -131,6 +135,9 @@ public class RedisTestController {
 
     @Autowired
     private RedisConnectionFactory connectionFactory;
+
+    @Autowired
+    private RedisRateLimiterService rateLimiterService;
 
     @GetMapping("/test")
     public String test() {
@@ -149,15 +156,27 @@ public class RedisTestController {
     }
 
     @GetMapping("/docker-test")
-    public Integer dockerTest() {
+    public ResponseEntity<Void> dockerTest(
+            @RequestHeader(value = "X-clientId", required = false) String clientId,
+            jakarta.servlet.http.HttpServletResponse response) {
 
-        Integer value = redisService.redisTemplate
-                .opsForValue()
-                .get("spring-check");
+        if (clientId == null || clientId.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
 
-        System.out.println("spring-check = " + value);
+        // Run the actual rate-limiting algorithm
+        RedisRateLimitResultResponse result = rateLimiterService.checkRateLimit(clientId);
 
-        return value;
+        // Add standard rate limit headers
+        response.setHeader("X-RateLimit-Limit", String.valueOf(result.getLimit()));
+        response.setHeader("X-RateLimit-Remaining", String.valueOf(result.getRemaining()));
+        response.setHeader("X-RateLimit-Reset", String.valueOf(result.getResetTime()));
+
+        if (!result.isAllowed()) {
+            return ResponseEntity.status(429).build();
+        }
+
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/redis-info")

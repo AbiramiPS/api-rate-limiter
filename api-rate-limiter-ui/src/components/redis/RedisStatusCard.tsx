@@ -16,12 +16,27 @@ export function RedisStatusCard({ stats }: RedisStatusCardProps) {
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Redis Health</p>
           <div className="flex items-center gap-2 mt-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-            <h3 className="text-lg font-bold text-slate-900">Connected</h3>
+            {stats.connected ? (
+              <>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                <h3 className="text-lg font-bold text-slate-900">Connected</h3>
+              </>
+            ) : (
+              <>
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                <h3 className="text-lg font-bold text-rose-600">Disconnected</h3>
+              </>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1 font-mono">{stats.version}</p>
+          <p className="text-[11px] text-slate-400 mt-1 font-mono">
+            {stats.connected ? stats.version : 'Unavailable'}
+          </p>
         </div>
-        <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+        <div className={`p-3 rounded-2xl border ${
+          stats.connected
+            ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+            : 'bg-rose-50 text-rose-600 border-rose-100'
+        }`}>
           <Database className="w-6 h-6" />
         </div>
       </div>
@@ -30,7 +45,9 @@ export function RedisStatusCard({ stats }: RedisStatusCardProps) {
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Used Memory</p>
-          <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{stats.usedMemoryHuman}</h3>
+          <h3 className="text-2xl font-extrabold text-slate-900 mt-1">
+            {stats.connected ? stats.usedMemoryHuman : 'N/A'}
+          </h3>
           <p className="text-[11px] text-slate-400 mt-1">In-Memory Key Store</p>
         </div>
         <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
@@ -43,7 +60,7 @@ export function RedisStatusCard({ stats }: RedisStatusCardProps) {
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Rate Limit Counters</p>
           <h3 className="text-2xl font-extrabold text-slate-900 mt-1 font-mono">
-            {stats.rateLimitKeysCount}
+            {stats.connected ? stats.rateLimitKeysCount : 'N/A'}
           </h3>
           <p className="text-[11px] text-slate-400 mt-1">Pattern: rate_limit:C-*</p>
         </div>
@@ -57,7 +74,7 @@ export function RedisStatusCard({ stats }: RedisStatusCardProps) {
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cached Rule Keys</p>
           <h3 className="text-2xl font-extrabold text-amber-600 mt-1 font-mono">
-            {stats.ruleCacheKeysCount}
+            {stats.connected ? stats.ruleCacheKeysCount : 'N/A'}
           </h3>
           <p className="text-[11px] text-slate-400 mt-1">Pattern: rate_rule:C-*</p>
         </div>

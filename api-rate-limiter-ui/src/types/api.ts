@@ -4,6 +4,8 @@ export interface UserPlanRequest {
   clientName: string;
   planId: number;
   customRuleEnabled: boolean;
+  rateLimitMode?: string;
+  customRule?: UserCustomRuleRequest;
 }
 
 export interface UserPlanResponse {

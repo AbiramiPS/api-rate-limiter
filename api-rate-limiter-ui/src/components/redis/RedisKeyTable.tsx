@@ -10,17 +10,20 @@ import { useToast } from '../providers/ToastProvider';
 import { Database, RotateCcw, Trash2, Clock, Eye, Activity, Key, RefreshCw } from 'lucide-react';
 import { formatRuleSpec } from '@/lib/utils';
 
-export function RedisKeyTable() {
+export interface RedisKeyTableProps {
+  keys: RedisKeyItem[];
+  onRefresh: () => void;
+  onFlushSingle: (key: string) => Promise<void>;
+  onFlushAll: () => Promise<void>;
+  redisConnected?: boolean;
+}
+
+export function RedisKeyTable({ keys, onRefresh, onFlushSingle, onFlushAll, redisConnected = true }: RedisKeyTableProps) {
   const { toast } = useToast();
-  const [keys, setKeys] = useState<RedisKeyItem[]>(RateLimiterStore.getRedisKeys());
   const [activeTab, setActiveTab] = useState<'ALL' | 'RATE_LIMIT' | 'RATE_RULE'>('ALL');
   const [keyToFlush, setKeyToFlush] = useState<string | null>(null);
   const [showFlushAllDialog, setShowFlushAllDialog] = useState(false);
   const [selectedKeyForJson, setSelectedKeyForJson] = useState<RedisKeyItem | null>(null);
-
-  const refreshKeys = () => {
-    setKeys(RateLimiterStore.getRedisKeys());
-  };
 
   const filteredKeys = React.useMemo(() => {
     return keys.filter((k) => {
@@ -30,19 +33,25 @@ export function RedisKeyTable() {
     });
   }, [keys, activeTab]);
 
-  const handleFlushSingleKey = () => {
+  const handleFlushSingleKey = async () => {
     if (!keyToFlush) return;
-    RateLimiterStore.flushRedisKey(keyToFlush);
-    toast('Key Flushed', `Removed '${keyToFlush}' from Redis memory`, 'success');
+    try {
+      await onFlushSingle(keyToFlush);
+      toast('Key Flushed', `Removed '${keyToFlush}' from Redis memory`, 'success');
+    } catch (e: any) {
+      toast('Error', e.message || 'Failed to flush key', 'error');
+    }
     setKeyToFlush(null);
-    refreshKeys();
   };
 
-  const handleFlushAll = () => {
-    RateLimiterStore.flushAllRedisKeys();
-    toast('All Redis Keys Flushed', 'Cleared all counter and cache keys from Redis.', 'warning');
+  const handleFlushAll = async () => {
+    try {
+      await onFlushAll();
+      toast('All Redis Keys Flushed', 'Cleared all counter and cache keys from Redis.', 'warning');
+    } catch (e: any) {
+      toast('Error', e.message || 'Failed to flush keys', 'error');
+    }
     setShowFlushAllDialog(false);
-    refreshKeys();
   };
 
   const columns: Column<RedisKeyItem>[] = [
@@ -131,12 +140,20 @@ export function RedisKeyTable() {
     {
       header: 'TTL (Seconds)',
       accessorKey: 'ttlSeconds',
-      cell: (item) => (
-        <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-700">
-          <Clock className="w-3.5 h-3.5 text-slate-400" />
-          <span>{item.ttlSeconds}s</span>
-        </div>
-      ),
+      cell: (item) => {
+        let ttlText = `${item.ttlSeconds}s`;
+        if (item.ttlSeconds === -1) {
+          ttlText = 'No expiration';
+        } else if (item.ttlSeconds === -2) {
+          ttlText = 'Expired / Not found';
+        }
+        return (
+          <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-700">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <span>{ttlText}</span>
+          </div>
+        );
+      },
     },
     {
       header: 'Enforcement Status',
@@ -154,7 +171,8 @@ export function RedisKeyTable() {
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => setKeyToFlush(item.key)}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+            disabled={!redisConnected}
+            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Flush key from Redis"
           >
             <RotateCcw className="w-4 h-4" />
@@ -200,7 +218,7 @@ export function RedisKeyTable() {
 
       <div className="flex items-center gap-2">
         <button
-          onClick={refreshKeys}
+          onClick={onRefresh}
           className="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-xs font-semibold flex items-center gap-1.5"
         >
           <RefreshCw className="w-3.5 h-3.5" />
@@ -208,7 +226,8 @@ export function RedisKeyTable() {
         </button>
         <button
           onClick={() => setShowFlushAllDialog(true)}
-          className="px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors flex items-center gap-1.5"
+          disabled={!redisConnected}
+          className="px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Trash2 className="w-3.5 h-3.5" />
           Flush All Keys
@@ -225,8 +244,8 @@ export function RedisKeyTable() {
         searchKey="key"
         searchPlaceholder="Filter keys by pattern rate_limit:* or rate_rule:*..."
         filterComponent={filterComponent}
-        emptyTitle="No Redis Keys Found"
-        emptyDescription="No keys stored in Redis memory matching your filter."
+        emptyTitle={!redisConnected ? "Redis Monitor Unavailable" : "No Redis Keys Found"}
+        emptyDescription={!redisConnected ? "Redis cannot currently be reached. Start Redis to enable live key monitoring." : "No keys stored in Redis memory matching your filter."}
       />
 
       {/* JSON Viewer Modal for Rule Cache Keys */}

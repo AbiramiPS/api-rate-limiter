@@ -96,3 +96,127 @@ export async function del<T>(url: string): Promise<T> {
   });
   return handleResponse<T>(response);
 }
+
+export interface RedisHealth {
+  connected: boolean;
+  redisVersion: string;
+  memoryUsed: number;
+  totalKeys: number;
+}
+
+export interface RedisKeyInfo {
+  key: string;
+  category: string;
+  value: string | null;
+  ttl: number | null;
+  clientId: string;
+}
+
+export async function getRedisHealth(): Promise<RedisHealth> {
+  return get<RedisHealth>('/admin/redis/health');
+}
+
+export async function getRedisCounters(): Promise<RedisKeyInfo[]> {
+  return get<RedisKeyInfo[]>('/admin/redis/counters');
+}
+
+export async function getRedisRules(): Promise<RedisKeyInfo[]> {
+  return get<RedisKeyInfo[]>('/admin/redis/rules');
+}
+
+export async function resetRateLimitCounter(clientId: string): Promise<void> {
+  return del<void>(`/admin/redis/rate-limit/${encodeURIComponent(clientId)}`);
+}
+
+export async function flushRedisKeys(): Promise<void> {
+  return del<void>('/admin/redis/flush-all');
+}
+
+export interface RedisRateLimitEvent {
+  clientId: string;
+  clientName: string;
+  statusCode: number;
+  allowed: boolean;
+  currentCount: number;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
+  message: string;
+  timestamp: string;
+}
+
+export async function getRateLimitEvents(): Promise<RedisRateLimitEvent[]> {
+  return get<RedisRateLimitEvent[]>('/admin/redis/events');
+}
+
+export async function executeRedisTest(clientId: string): Promise<{
+  allowed: boolean;
+  status: number;
+  message: string;
+  ttlSeconds: number;
+  currentCount: number;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
+  source: string;
+}> {
+  const response = await fetch(`${API_BASE_URL}/admin/redis/docker-test`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-clientId': clientId,
+    },
+  });
+
+  const status = response.status;
+  const limitHeader = response.headers.get('X-RateLimit-Limit');
+  const remainingHeader = response.headers.get('X-RateLimit-Remaining');
+  const resetHeader = response.headers.get('X-RateLimit-Reset');
+
+  const maxRequests = limitHeader ? parseInt(limitHeader, 10) : 0;
+  const remaining = remainingHeader ? parseInt(remainingHeader, 10) : 0;
+  const ttlSeconds = resetHeader ? parseInt(resetHeader, 10) : 0;
+  const currentCount = maxRequests - remaining;
+
+  if (status === 429) {
+    let message = `HTTP 429: Rate limit exceeded (${maxRequests}/${maxRequests} requests)`;
+    return {
+      allowed: false,
+      status,
+      message,
+      ttlSeconds,
+      currentCount: maxRequests,
+      maxRequests,
+      windowValue: 1, // Default fallback
+      windowUnit: 'MINUTE',
+      source: 'Redis Interceptor',
+    };
+  }
+
+  if (!response.ok) {
+    let message = 'Request failed';
+    try {
+      const body = await response.json();
+      message = body.message || message;
+    } catch {
+      try {
+        const text = await response.text();
+        if (text) message = text;
+      } catch {}
+    }
+    throw new ApiError(message, status);
+  }
+
+  return {
+    allowed: true,
+    status,
+    message: `HTTP 200: Request permitted (${currentCount}/${maxRequests} requests)`,
+    ttlSeconds,
+    currentCount,
+    maxRequests,
+    windowValue: 1,
+    windowUnit: 'MINUTE',
+    source: 'Redis Interceptor',
+  };
+}
+

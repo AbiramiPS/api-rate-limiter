@@ -17,6 +17,9 @@ public class RedisRateLimiterService {
     @Autowired
     private RedisRuleResolverService redisRuleResolverService;
 
+    @Autowired
+    private UserPlanService userPlanService;
+
     public RedisRateLimitResultResponse checkRateLimit(String clientId) {
 
         // Get the rule applicable to this client
@@ -41,6 +44,31 @@ public class RedisRateLimiterService {
 
         // Check whether request is allowed
         boolean allowed = currentCount <= maxRequests;
+
+        // Log rate-limiting event to Redis
+        String clientName = clientId;
+        try {
+            com.api_rate_limiter.entity.UserPlan user = userPlanService.getUserPlanEntity(clientId);
+            if (user != null && user.getClientName() != null) {
+                clientName = user.getClientName();
+            }
+        } catch (Exception e) {
+            // Ignore if user not found
+        }
+
+        com.api_rate_limiter.dto.response.RedisRateLimitEventDto event = new com.api_rate_limiter.dto.response.RedisRateLimitEventDto(
+            clientId,
+            clientName,
+            allowed ? 200 : 429,
+            allowed,
+            currentCount,
+            maxRequests,
+            rule.getWindowValue(),
+            rule.getWindowUnit(),
+            allowed ? "Request allowed" : "Rate limit exceeded",
+            java.time.Instant.now().toString()
+        );
+        redisService.logEvent(event);
 
         return new RedisRateLimitResultResponse(
                 allowed,
