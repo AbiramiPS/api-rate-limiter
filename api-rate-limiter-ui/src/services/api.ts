@@ -132,6 +132,23 @@ export async function flushRedisKeys(): Promise<void> {
   return del<void>('/admin/redis/flush-all');
 }
 
+export interface RedisRateLimitEvent {
+  clientId: string;
+  clientName: string;
+  statusCode: number;
+  allowed: boolean;
+  currentCount: number;
+  maxRequests: number;
+  windowValue: number;
+  windowUnit: string;
+  message: string;
+  timestamp: string;
+}
+
+export async function getRateLimitEvents(): Promise<RedisRateLimitEvent[]> {
+  return get<RedisRateLimitEvent[]>('/admin/redis/events');
+}
+
 export async function executeRedisTest(clientId: string): Promise<{
   allowed: boolean;
   status: number;
@@ -162,11 +179,7 @@ export async function executeRedisTest(clientId: string): Promise<{
   const currentCount = maxRequests - remaining;
 
   if (status === 429) {
-    let message = 'Rate limit exceeded';
-    try {
-      const body = await response.json();
-      message = body.message || message;
-    } catch {}
+    let message = `HTTP 429: Rate limit exceeded (${maxRequests}/${maxRequests} requests)`;
     return {
       allowed: false,
       status,
@@ -174,7 +187,7 @@ export async function executeRedisTest(clientId: string): Promise<{
       ttlSeconds,
       currentCount: maxRequests,
       maxRequests,
-      windowValue: 1, // Default or mock fallback if not present, interceptor doesn't pass it back directly in headers but we can estimate
+      windowValue: 1, // Default fallback
       windowUnit: 'MINUTE',
       source: 'Redis Interceptor',
     };

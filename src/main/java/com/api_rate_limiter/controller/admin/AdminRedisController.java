@@ -2,6 +2,7 @@ package com.api_rate_limiter.controller.admin;
 
 import com.api_rate_limiter.dto.response.RedisHealthDto;
 import com.api_rate_limiter.dto.response.RedisKeyInfoDto;
+import com.api_rate_limiter.dto.response.RedisRateLimitEventDto;
 import com.api_rate_limiter.service.RedisService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +32,11 @@ public class AdminRedisController {
     @GetMapping("/rules")
     public ResponseEntity<List<RedisKeyInfoDto>> rules() {
         return ResponseEntity.ok(redisService.listRules());
+    }
+
+    @GetMapping("/events")
+    public ResponseEntity<List<RedisRateLimitEventDto>> events() {
+        return ResponseEntity.ok(redisService.getRecentEvents());
     }
 
     @DeleteMapping("/rate-limit/{clientId}")

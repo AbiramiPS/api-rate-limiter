@@ -49,11 +49,29 @@ public class RatePlanService {
 
         public Page<RatePlanResponse> getAll(Pageable pageable) {
                 Page<RatePlan> plans = repository.findAll(pageable);
-                return plans.map(mapper::toResponse);
+                return plans.map(plan -> {
+                    RatePlanResponse response = mapper.toResponse(plan);
+                    RatePlanRule rule = ruleRepository.findByPlan(plan);
+                    if (rule != null) {
+                        response.setMaxRequests(rule.getMaxRequests());
+                        response.setWindowValue(rule.getWindowValue());
+                        response.setWindowUnit(rule.getWindowUnit());
+                    }
+                    return response;
+                });
         }
 
         public Page<RatePlanResponse> searchPlans(String planName, Pageable pageable) {
                 Page<RatePlan> plans = repository.findByPlanNameContainingIgnoreCase(planName, pageable);
-                return plans.map(mapper::toResponse);
+                return plans.map(plan -> {
+                    RatePlanResponse response = mapper.toResponse(plan);
+                    RatePlanRule rule = ruleRepository.findByPlan(plan);
+                    if (rule != null) {
+                        response.setMaxRequests(rule.getMaxRequests());
+                        response.setWindowValue(rule.getWindowValue());
+                        response.setWindowUnit(rule.getWindowUnit());
+                    }
+                    return response;
+                });
         }
 }

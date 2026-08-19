@@ -19,4 +19,9 @@ public class UserPlanRequest {
 
     @NotNull(message = "Custom Rule status is required")
     private Boolean customRuleEnabled;
+
+    private String rateLimitMode;
+
+    @jakarta.validation.Valid
+    private UserCustomRuleRequest customRule;
 }

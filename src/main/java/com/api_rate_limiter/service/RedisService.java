@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import com.api_rate_limiter.dto.response.RedisRuleCacheResponse;
+import com.api_rate_limiter.dto.response.RedisRateLimitEventDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 
 import com.api_rate_limiter.dto.response.RedisHealthDto;
@@ -26,6 +28,12 @@ public class RedisService {
     // Used for cached rules
     @Autowired
     private RedisTemplate<String, RedisRuleCacheResponse> redisRuleCacheTemplate;
+
+    @Autowired
+    private RedisTemplate<String, String> redisEventTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private RedisConnectionFactory connectionFactory;
@@ -249,4 +257,28 @@ public String redisInfo() {
         }
     }
 
+    public void logEvent(RedisRateLimitEventDto event) {
+        try {
+            String json = objectMapper.writeValueAsString(event);
+            redisEventTemplate.opsForList().leftPush("rate_limit_events", json);
+            redisEventTemplate.opsForList().trim("rate_limit_events", 0, 99);
+        } catch (Exception e) {
+            System.err.println("Failed to serialize or store rate limit event: " + e.getMessage());
+        }
+    }
+
+    public List<RedisRateLimitEventDto> getRecentEvents() {
+        List<RedisRateLimitEventDto> events = new ArrayList<>();
+        try {
+            List<String> rawEvents = redisEventTemplate.opsForList().range("rate_limit_events", 0, 99);
+            if (rawEvents != null) {
+                for (String raw : rawEvents) {
+                    events.add(objectMapper.readValue(raw, RedisRateLimitEventDto.class));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to read or deserialize rate limit events: " + e.getMessage());
+        }
+        return events;
+    }
 }

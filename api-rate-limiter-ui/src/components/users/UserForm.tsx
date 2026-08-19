@@ -25,7 +25,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
   const [clientId, setClientId] = useState(initialUser?.clientId || '');
   const [clientName, setClientName] = useState(initialUser?.clientName || '');
   const [planId, setPlanId] = useState<number>(initialUser?.planId || 1);
-  const [customRuleEnabled, setCustomRuleEnabled] = useState(initialUser?.customRuleEnabled || false);
+  const [rateLimitMode, setRateLimitMode] = useState<'PLAN_DEFAULT' | 'CUSTOM'>('PLAN_DEFAULT');
 
   // Custom rule configuration state
   const [maxRequests, setMaxRequests] = useState<number | ''>('');
@@ -33,7 +33,6 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
   const [windowUnit, setWindowUnit] = useState<string>('MINUTE');
   const [price, setPrice] = useState<number | ''>('');
   const [customRuleActive, setCustomRuleActive] = useState<boolean>(true);
-  const [hasExistingRule, setHasExistingRule] = useState<boolean>(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -67,13 +66,15 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
           setWindowUnit(rule.windowUnit);
           setPrice(rule.price);
           setCustomRuleActive(rule.active);
-          setHasExistingRule(true);
+          setRateLimitMode('CUSTOM');
         } catch (error) {
           console.error('Failed to load custom rule:', error);
-          setHasExistingRule(false);
+          setRateLimitMode('PLAN_DEFAULT');
         }
       };
       loadCustomRule();
+    } else {
+      setRateLimitMode('PLAN_DEFAULT');
     }
   }, [isEdit, initialUser]);
 
@@ -101,13 +102,17 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
   const selectedPlan = plans.find((p) => p.id === planId);
   const isEnterprisePlan = selectedPlan?.planName?.toUpperCase() === 'ENTERPRISE';
 
+  const planDefaultLimitText = selectedPlan
+    ? `${selectedPlan.maxRequests} requests / ${selectedPlan.windowValue} ${selectedPlan.windowUnit}`
+    : '';
+
   // Handle plan change and apply Enterprise business rules
   const handlePlanChange = (selectedPlanId: number) => {
     setPlanId(selectedPlanId);
     const selPlan = plans.find((p) => p.id === selectedPlanId);
     const isEnterprise = selPlan?.planName?.toUpperCase() === 'ENTERPRISE';
     if (!isEnterprise) {
-      setCustomRuleEnabled(false);
+      setRateLimitMode('PLAN_DEFAULT');
       // Clear custom rule state
       setMaxRequests('');
       setWindowValue('');
@@ -117,7 +122,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
     }
   };
 
-  const showCustomRule = isEnterprisePlan && customRuleEnabled;
+  const showCustomRule = isEnterprisePlan && rateLimitMode === 'CUSTOM';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,15 +134,15 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
     // Custom rule input validations
     if (showCustomRule) {
       if (maxRequests === '' || Number(maxRequests) <= 0) {
-        toast('Validation Error', 'Max Requests is required and must be greater than 0.', 'error');
+        toast('Validation Error', 'Requests value must be greater than 0.', 'error');
         return;
       }
       if (windowValue === '' || Number(windowValue) <= 0) {
-        toast('Validation Error', 'Window Value is required and must be greater than 0.', 'error');
+        toast('Validation Error', 'Window value must be greater than 0.', 'error');
         return;
       }
       if (windowUnit === '') {
-        toast('Validation Error', 'Window Unit is required.', 'error');
+        toast('Validation Error', 'Window unit is required.', 'error');
         return;
       }
       if (price !== '' && Number(price) < 0) {
@@ -149,55 +154,31 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
     setIsSubmitting(true);
 
     try {
-      // Ensure custom rule is only sent if Enterprise plan
-      const effectiveCustomRuleEnabled = customRuleEnabled && isEnterprisePlan;
+      const customRulePayload: UserCustomRuleRequest | undefined = showCustomRule ? {
+        userPlanId: 0, // Backend sets this automatically inside transaction
+        maxRequests: Number(maxRequests),
+        windowValue: Number(windowValue),
+        windowUnit,
+        price: price !== '' ? Number(price) : 0,
+        active: customRuleActive,
+      } : undefined;
+
       const request: UserPlanRequest = {
         clientId: clientId.trim(),
         clientName: clientName.trim(),
         planId,
-        customRuleEnabled: effectiveCustomRuleEnabled,
+        customRuleEnabled: showCustomRule,
+        rateLimitMode,
+        customRule: customRulePayload,
       };
 
-      let savedUser;
       if (isEdit && initialUser) {
-        savedUser = await UserPlanService.updateUser(initialUser.clientId, request);
-      } else {
-        savedUser = await UserPlanService.createUser(request);
-      }
-
-      // Handle custom rule save/update/delete flow
-      if (effectiveCustomRuleEnabled) {
-        const customRuleRequest: UserCustomRuleRequest = {
-          userPlanId: savedUser.id,
-          maxRequests: Number(maxRequests),
-          windowValue: Number(windowValue),
-          windowUnit,
-          price: price !== '' ? Number(price) : 0,
-          active: customRuleActive,
-        };
-
-        if (isEdit && hasExistingRule) {
-          await CustomRuleService.updateCustomRule(clientId.trim(), customRuleRequest);
-          toast('Client & Custom Rule Saved', `Updated client details and custom rule. Redis cache invalidated.`, 'success');
-        } else {
-          await CustomRuleService.createCustomRule(customRuleRequest);
-          toast('Client & Custom Rule Saved', `Registered client and created rate limit custom rule. Redis cache invalidated.`, 'success');
-        }
-      } else {
-        // Downgraded or switched OFF: clean up any existing custom rule
-        if (isEdit && hasExistingRule) {
-          try {
-            await CustomRuleService.deleteCustomRule(clientId.trim());
-          } catch (err) {
-            console.warn('Custom rule cleanup skipped or not found:', err);
-          }
-        }
+        await UserPlanService.updateUser(initialUser.clientId, request);
         toast('Client Saved', `Successfully saved client details.`, 'success');
-      }
-
-      if (isEdit) {
         router.push(`/users/${clientId}`);
       } else {
+        await UserPlanService.createUser(request);
+        toast('Client Created', `Successfully registered client '${clientName}' (${clientId}).`, 'success');
         router.push(`/users`);
       }
     } catch (error) {
@@ -257,16 +238,16 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
                 </div>
               </div>
 
-              {/* Rate Limiting Configuration Card */}
+              {/* Rate Limit Configuration Card */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
                 <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
-                  Rate Limiting Configuration
+                  Rate Limit Configuration
                 </h3>
 
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Assigned Rate Plan <span className="text-rose-500">*</span>
+                      Rate Limit Plan <span className="text-rose-500">*</span>
                     </label>
                     <select
                       value={planId}
@@ -281,33 +262,54 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
                     </select>
                   </div>
 
-                  {/* Custom Rule Enable Switch (Enterprise Feature) */}
-                  <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-amber-600 fill-amber-500" />
-                        <div>
-                          <h4 className="text-xs font-bold text-amber-950">Enable Custom Rule</h4>
-                          <p className="text-[11px] text-amber-800/90">
-                            Apply rate limit custom override configuration.
-                          </p>
-                        </div>
-                      </div>
-
-                      <label className="relative inline-flex items-center cursor-pointer">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">
+                      Rate Limit Mode
+                    </label>
+                    <div className="space-y-3">
+                      {/* Option 1: Use Plan Default */}
+                      <label className="flex items-start gap-3 cursor-pointer select-none">
                         <input
-                          type="checkbox"
-                          checked={customRuleEnabled}
-                          onChange={(e) => setCustomRuleEnabled(e.target.checked)}
-                          disabled={!isEnterprisePlan}
-                          className="sr-only peer"
+                          type="radio"
+                          name="rateLimitMode"
+                          value="PLAN_DEFAULT"
+                          checked={rateLimitMode === 'PLAN_DEFAULT'}
+                          onChange={() => setRateLimitMode('PLAN_DEFAULT')}
+                          className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 mt-0.5"
                         />
-                        <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden peer-focus:ring-2 peer-focus:ring-amber-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 disabled:opacity-50" />
+                        <div>
+                          <span className="text-xs font-bold text-slate-900">Use Plan Default</span>
+                          {rateLimitMode === 'PLAN_DEFAULT' 
+                          // && (
+                          //   <p className="text-[11px] text-slate-500 mt-1 font-semibold">
+                          //     Inherited Plan Limit: {planDefaultLimitText}
+                          //   </p>
+                          // )
+                          }
+                        </div>
+                      </label>
+
+                      {/* Option 2: Custom Limit */}
+                      <label className={`flex items-start gap-3 select-none ${isEnterprisePlan ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                        <input
+                          type="radio"
+                          name="rateLimitMode"
+                          value="CUSTOM"
+                          checked={rateLimitMode === 'CUSTOM'}
+                          onChange={() => {
+                            if (isEnterprisePlan) setRateLimitMode('CUSTOM');
+                          }}
+                          disabled={!isEnterprisePlan}
+                          className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 mt-0.5"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-900">Custom Limit</span>
+                        </div>
                       </label>
                     </div>
 
                     {!isEnterprisePlan && (
-                      <p className="text-[11px] text-amber-700 font-semibold flex items-center gap-1">
+                      <p className="text-[11px] text-amber-700 font-semibold flex items-center gap-1 mt-3">
                         <Info className="w-3.5 h-3.5" />
                         Custom rules are available only for Enterprise clients.
                       </p>
@@ -317,16 +319,16 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
               </div>
             </div>
 
-            {/* Right Column: Custom Rule Configuration (Render only when Enterprise + toggle ON) */}
+            {/* Right Column: Custom Rate Limit (Render only when rateLimitMode === CUSTOM) */}
             {showCustomRule && (
               <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4 animate-in fade-in zoom-in-95 duration-150">
                 <div className="border-b border-slate-100 pb-3">
                   <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-amber-600 fill-amber-500" />
-                    Custom Rate Limit Configuration
+                    Custom Rate Limit
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    This rule overrides the Enterprise plan's default rate limit for this client.
+                    This custom limit overrides the selected plan's default rate limit.
                   </p>
                 </div>
 
@@ -334,14 +336,14 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Max Requests Allowed <span className="text-rose-500">*</span>
+                        Requests <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="number"
                         min="1"
                         value={maxRequests}
                         onChange={(e) => setMaxRequests(e.target.value === '' ? '' : Number(e.target.value))}
-                        placeholder="e.g. 200"
+                        placeholder="e.g. 10"
                         className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium"
                         required
                       />
@@ -349,7 +351,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Window Value <span className="text-rose-500">*</span>
+                        Window <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="number"
@@ -366,7 +368,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Window Time Unit <span className="text-rose-500">*</span>
+                        Window Unit <span className="text-rose-500">*</span>
                       </label>
                       <select
                         value={windowUnit}
@@ -383,7 +385,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Rule Cost Price ($)
+                        Price ($)
                       </label>
                       <input
                         type="number"
@@ -396,17 +398,18 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="customRuleActive"
-                      checked={customRuleActive}
-                      onChange={(e) => setCustomRuleActive(e.target.checked)}
-                      className="w-4 h-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <label htmlFor="customRuleActive" className="text-xs font-semibold text-slate-700 select-none">
-                      Active Override (Enable immediately)
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Status
                     </label>
+                    <select
+                      value={customRuleActive ? 'ACTIVE' : 'INACTIVE'}
+                      onChange={(e) => setCustomRuleActive(e.target.value === 'ACTIVE')}
+                      className="w-full px-3 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -429,7 +432,7 @@ export function UserForm({ initialUser, isEdit = false }: UserFormProps) {
               className="inline-flex items-center gap-2 px-6 py-2.5 text-xs md:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-md transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Client'}
+              {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create User'}
             </button>
           </div>
         </div>

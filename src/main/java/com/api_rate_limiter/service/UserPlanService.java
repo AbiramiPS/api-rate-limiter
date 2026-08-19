@@ -1,21 +1,23 @@
 package com.api_rate_limiter.service;
 
 import org.springframework.stereotype.Service;
-import java.lang.module.ResolutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.api_rate_limiter.entity.UserPlan;
 import com.api_rate_limiter.dto.request.UserPlanRequest;
+import com.api_rate_limiter.dto.request.UserCustomRuleRequest;
 import com.api_rate_limiter.dto.response.UserPlanResponse;
 import com.api_rate_limiter.entity.RatePlan;
+import com.api_rate_limiter.entity.UserCustomRule;
 import com.api_rate_limiter.repository.UserPlanRepository;
 import com.api_rate_limiter.repository.RatePlanRepository;
+import com.api_rate_limiter.repository.UserCustomRuleRepository;
 import com.api_rate_limiter.exception.DuplicateResourceException;
 import com.api_rate_limiter.exception.ResourceNotFoundException;
 import java.util.List;
 import org.springframework.data.domain.Page;
-import com.api_rate_limiter.dto.request.UserPlanRequest;
 
 @Service
 public class UserPlanService {
@@ -25,6 +27,15 @@ public class UserPlanService {
 
     @Autowired
     private RatePlanRepository planRepo;
+
+    @Autowired
+    private UserCustomRuleService customRuleService;
+
+    @Autowired
+    private UserCustomRuleRepository customRuleRepo;
+
+    @Autowired
+    private RedisService redisService;
 
     private UserPlanResponse toResponse(UserPlan user) {
 
@@ -39,6 +50,7 @@ public class UserPlanService {
         return response;
     }
 
+    @Transactional
     public UserPlanResponse saveUserPlan(UserPlanRequest request) {
         // Check if clientId already exists
         if (repo.findByClientId(request.getClientId()) != null) {
@@ -51,18 +63,19 @@ public class UserPlanService {
 
         user.setClientId(request.getClientId());
         user.setClientName(request.getClientName());
-        user.setCustomRuleEnabled(request.getCustomRuleEnabled());
+        
+        boolean customEnabled = "CUSTOM".equalsIgnoreCase(request.getRateLimitMode());
+        user.setCustomRuleEnabled(customEnabled);
         user.setPlan(plan);
         UserPlan saved = repo.save(user);
+
+        if (customEnabled && request.getCustomRule() != null) {
+            UserCustomRuleRequest ruleReq = request.getCustomRule();
+            ruleReq.setUserPlanId(saved.getId());
+            customRuleService.saveRule(ruleReq);
+        }
+
         return toResponse(saved);
-
-        // // Entity -> Response DTO
-        // UserPlanResponse response = new UserPlanResponse();
-
-        // response.setId(saved.getId());
-        // response.setClientId(saved.getClientId());
-        // response.setClientName(saved.getClientName());
-        // response.setPlanName(saved.getPlan().getPlanName());
         // response.setCustomRuleEnabled(saved.isCustomRuleEnabled());
 
         // return response;
@@ -116,6 +129,7 @@ public class UserPlanService {
                 .map(this::toResponse);
     }
 
+    @Transactional
     public UserPlanResponse updateUserPlan(
             String clientId,
             UserPlanRequest request) {
@@ -129,15 +143,33 @@ public class UserPlanService {
         RatePlan plan = planRepo.findById(request.getPlanId())
                 .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
 
-        if (user.getPlan().getId().equals(plan.getId())) {
-            throw new DuplicateResourceException("User is already using this plan");
-        }
-
         user.setPlan(plan);
         user.setClientName(request.getClientName());
-        user.setCustomRuleEnabled(request.getCustomRuleEnabled());
+        
+        boolean customEnabled = "CUSTOM".equalsIgnoreCase(request.getRateLimitMode());
+        user.setCustomRuleEnabled(customEnabled);
 
         UserPlan updated = repo.save(user);
+
+        if (customEnabled && request.getCustomRule() != null) {
+            UserCustomRuleRequest ruleReq = request.getCustomRule();
+            ruleReq.setUserPlanId(updated.getId());
+
+            UserCustomRule existingRule = customRuleRepo.findByUser(updated);
+            if (existingRule != null) {
+                customRuleService.updateRule(clientId, ruleReq);
+            } else {
+                customRuleService.saveRule(ruleReq);
+            }
+        } else {
+            // Set existing custom rule to inactive if it exists
+            UserCustomRule existingRule = customRuleRepo.findByUser(updated);
+            if (existingRule != null) {
+                existingRule.setActive(false);
+                customRuleRepo.save(existingRule);
+                redisService.deleteCachedRule(updated.getClientId());
+            }
+        }
 
         return toResponse(updated);
     }

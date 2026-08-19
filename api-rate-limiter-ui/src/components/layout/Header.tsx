@@ -17,10 +17,9 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { RateLimiterStore } from '@/lib/services/store';
-import { ActivityLog } from '@/types';
 import { formatTimeAgo } from '@/lib/utils';
 import { useToast } from '../providers/ToastProvider';
-import { getRedisHealth } from '@/services/api';
+import { getRedisHealth, getRateLimitEvents, executeRedisTest, RedisRateLimitEvent } from '@/services/api';
 
 interface HeaderProps {
   onOpenMobileMenu?: () => void;
@@ -32,11 +31,12 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
   const { toast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [events, setEvents] = useState<RedisRateLimitEvent[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [redisActive, setRedisActive] = useState<boolean | null>(null);
 
+  // Check Redis Connection health
   useEffect(() => {
     const checkRedis = async () => {
       try {
@@ -51,17 +51,35 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
     return () => clearInterval(interval);
   }, []);
 
+  // Poll real-time rate limit events
   useEffect(() => {
-    setLogs(RateLimiterStore.getLogs().slice(0, 5));
-  }, [pathname, showNotifications]);
+    const fetchEvents = async () => {
+      try {
+        const res = await getRateLimitEvents();
+        setEvents(res.slice(0, 10)); // Display the latest 10 events
+      } catch (err) {
+        console.error('Failed to fetch events:', err);
+      }
+    };
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 3000); // 3 seconds interval
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleQuickTest = () => {
-    // Quick test on client C-001 or C-004
-    const res = RateLimiterStore.simulateApiRequest('C-001');
-    if (res.allowed) {
-      toast('Simulated Request Allowed (C-001)', res.message, 'success');
-    } else {
-      toast('Simulated Request Blocked (C-001)', res.message, 'error');
+  const handleQuickTest = async () => {
+    try {
+      const res = await executeRedisTest('C-001');
+      const messageText = `Request count: ${res.currentCount}/${res.maxRequests} in ${res.windowValue} ${res.windowUnit}`;
+      if (res.allowed) {
+        toast('Simulated Request Allowed (C-001)', messageText, 'success');
+      } else {
+        toast('Simulated Request Blocked (C-001)', messageText, 'error');
+      }
+      // Immediately fetch events to refresh panel
+      const resEvents = await getRateLimitEvents();
+      setEvents(resEvents.slice(0, 10));
+    } catch (err) {
+      toast('Test Error', 'Failed to execute rate limit test.', 'error');
     }
   };
 
@@ -165,16 +183,23 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
               </div>
 
               <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
-                {logs.length === 0 ? (
-                  <p className="p-4 text-xs text-slate-500 text-center">No recent activity logs.</p>
+                {events.length === 0 ? (
+                  <p className="p-4 text-xs text-slate-500 text-center">No recent rate-limit events</p>
                 ) : (
-                  logs.map((log) => (
-                    <div key={log.id} className="p-3 hover:bg-slate-50 transition-colors text-xs">
-                      <div className="flex items-center justify-between text-slate-500 text-[10px] mb-1">
-                        <span className="font-semibold text-slate-700">{log.clientName}</span>
-                        <span>{formatTimeAgo(log.timestamp)}</span>
+                  events.map((event, idx) => (
+                    <div key={idx} className="p-3 hover:bg-slate-50 transition-colors text-xs flex items-start gap-2.5">
+                      <span className="mt-1 flex h-2 w-2 relative shrink-0">
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${event.allowed ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between text-slate-500 text-[10px] mb-1">
+                          <span className="font-bold text-slate-700 truncate mr-2">{event.clientName}</span>
+                          <span className="shrink-0">{formatTimeAgo(event.timestamp)}</span>
+                        </div>
+                        <p className="text-slate-800 font-semibold leading-snug">
+                          HTTP {event.statusCode}: {event.message} ({event.currentCount}/{event.maxRequests} req in {event.windowValue} {event.windowUnit})
+                        </p>
                       </div>
-                      <p className="text-slate-800 font-medium leading-snug">{log.details}</p>
                     </div>
                   ))
                 )}

@@ -57,6 +57,10 @@ public class RedisRuleResolverService {
         if (user.isCustomRuleEnabled()) {
 
             UserCustomRule customRule = customRuleService.getRuleEntity(user);
+            if (customRule.getActive() == null || !customRule.getActive()) {
+                throw new com.api_rate_limiter.exception.ResourceNotFoundException(
+                        "Custom rate-limit configuration is missing for this client.");
+            }
 
             resolvedRule = new RedisRuleCacheResponse(
                     customRule.getMaxRequests(),

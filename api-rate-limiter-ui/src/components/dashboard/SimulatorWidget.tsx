@@ -142,6 +142,19 @@ export function SimulatorWidget({
       try {
         const res = await executeRedisTest(selectedClientId);
         latestResult = res;
+
+        // Step 4: Diagnostic logging
+        console.log({
+          selectedClient: selectedClientId,
+          effectiveRule: resolvedRule,
+          maxRequests: res.maxRequests,
+          windowValue: resolvedRule.windowValue,
+          windowUnit: resolvedRule.windowUnit,
+          currentCount: res.currentCount,
+          remaining: res.maxRequests - res.currentCount,
+          responseStatus: res.status
+        });
+
         tempLogs.push({
           id: i + 1,
           status: res.status,
